@@ -122,6 +122,9 @@ ren_aux 		db 		0 		;variable auxiliar para operaciones con posicion - renglon
 
 conta 			db 		0 		;contador
 
+shot_col 		db 		ini_columna 		;posición en columna de disparo 
+shot_ren		db      ini_renglon			;posicion en renglon de disparo
+
 ;; Variables de ayuda para lectura de tiempo del sistema
 tick_ms			dw 		55 		;55 ms por cada tick del sistema, esta variable se usa para operación de MUL convertir ticks a segundos
 mil				dw		1000 	;1000 auxiliar para operación DIV entre 1000
@@ -281,6 +284,26 @@ comprueba_mouse 	macro
 	int 33h			;llama interrupcion 33h para manejo del mouse, devuelve un valor en AX
 					;Si AX = 0000h, no existe el driver. Si AX = FFFFh, existe driver
 endm
+;--------------------------------------------------------------------------------
+;lee la entrada por teclado y la guarda en al
+lee_teclado macro 
+	mov ah,08h 			;Opcion 8 para interrupción 21h (entrada por teclado)
+	int 21h				;Interrupción 21h 
+endm
+
+;valida si se puede hacer movimiento a la derecha
+validar_derecha macro 
+	mov al, [player_col]  	;se mueve [palyer_col] a ax
+	inc al					;se incrementa 1 a ax
+	cmp al, 38				;se valida que el movimiento no sobrepase el limite derecho del juego (39-1)
+endm
+
+;valida si se puede hacer movimiento a la izquierda
+validar_izquierda macro
+	mov al, [player_col]  	;se mueve [palyer_col] a ax
+	dec al					;se decrementa 1 a ax
+	cmp al, 2				;se valida que el movimiento no sobrepase el limite izquiedo del juego (1+1)
+endm
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;Fin Macros;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,6 +325,78 @@ imprime_ui:
 	apaga_cursor_parpadeo 	;Deshabilita parpadeo del cursor
 	call DIBUJA_UI 			;procedimiento que dibuja marco de la interfaz
 	muestra_cursor_mouse 	;hace visible el cursor del mouse
+	mov ah, 0 				; Función 0: Configurar temporizador
+    int 1Ah   				; Llamar a la interrupción 1Ah
+    ; Ahora, los ticks del sistema están en CX:DX
+    mov ax, dx
+    mov [ticks], ax 		; Guardar los ticks en la variable 'ticks'
+	jmp juego
+
+juego: 
+	lee_teclado
+	cmp al,64h			;compara que el valor ingresado sea 64h (d)
+	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
+	cmp al, 61h			;compara que el valor ingresado sea 61h (s)
+	je mueveIzquierda	;salto a mueveIzquierda si se presiono la s
+	cmp al,20h 			;Compara que el valor ingresado sea 20h (espacio)
+	je Disparar 		;salto a Disparar si se presiono espacio
+	mov ah, 0 			;Función 0: Configurar temporizador
+    int 1Ah   			;Llamar a la interrupción 1Ah
+    ; Ahora, los ticks del sistema están en CX:DX
+    mov ax, dx
+    cmp ax,[ticks]
+	jne juego ;ciclo infinito realizado con los ticks 
+
+mueveDerecha:
+	validar_derecha			;valida que no sobrepase el limite derecho
+	je juego				;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA		;si no sobrepasa el limite, se mueve a la derecha 
+	jmp juego				;se hace salto a juego
+
+mueveIzquierda:
+	validar_izquierda		;valida que no sobrepese el limite izquierdo
+	je juego				;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA	;si no sobrepasa el limite, se mueve a la izquierda
+	jmp juego
+
+Disparar: 
+	mov al, [player_col] 		;Copia player_col en al
+	mov [shot_col], al          ;Copia [player_col] en shot_col. Posicionar la columna del disparo donde esta la nave 
+	mov al, [player_ren]		;Copia player_ren en al
+	sub al, 3d                  ;posiciona  la columna 1 renglon arriba de la nave
+	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
+	call IMPRIME_DISPARO        ;imprime el disparo
+Movimiento_disparo:
+	CALL BORRA_DISPARO				;se borra el dispar
+	dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo 
+	CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
+	cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
+	je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
+	lee_teclado					;lee teclado
+	cmp al,64h					;compara que el valor ingresado sea 64h (d)
+	je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
+	cmp al, 61h					;compara que el valor ingresado sea 61h (s)
+	je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
+	mov ax, dx
+    cmp ax,[ticks]
+	jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
+	
+borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
+	call BORRA_DISPARO
+	jmp juego
+
+mueveDerechaShot:
+	validar_derecha				;valida que no sobrepase el limite derecho
+	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA          ;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo		;se hace salto 
+
+mueveIzquierdaShot:
+	validar_izquierda			;valida que no sobrepase el limite derecho
+	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo
+
 
 ;En "mouse_no_clic" se revisa que el boton izquierdo del mouse no esté presionado
 ;Si el botón está suelto, continúa a la sección "mouse"
@@ -674,14 +769,45 @@ salir:				;inicia etiqueta salir
 
 	;Borra la nave del jugador, que recibe como parámetros las variables ren_aux y col_aux, que indican la posición central de la barra
 	DELETE_PLAYER proc
-		;Implementar
-
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		add [ren_aux],2
+		
+		dec [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		
+		dec [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		
+		add [col_aux],3
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		
+		inc [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		
 		ret
 	endp
 
 	;Imprime la nave del enemigo
 	PRINT_ENEMY proc
-
 		posiciona_cursor [ren_aux],[col_aux]
 		imprime_caracter_color 178,cRojo,bgNegro
 		inc [ren_aux]
@@ -775,6 +901,54 @@ salir:				;inicia etiqueta salir
 		mov [ren_aux],ah
 		call PRINT_ENEMY
 		ret
+	endp
+
+;---------------------------------------------------------------
+	MUEVE_DERECHA proc
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		inc [player_col]		;se incrementa 1 a [player_col] 
+		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
+		ret
+	endp
+
+	MUEVE_IZQUIERDA proc
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		dec [player_col]		;se decrementa 1 a [player_col] 
+		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
+		ret 
+	endp
+	;manda a imprimir el disparo. Se auxilia de col_aux y ren_aux
+	IMPRIME_DISPARO proc
+		mov al,[shot_col]
+		mov ah,[shot_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		CALL PRINT_SHOT 
+		ret
+	endp
+
+	;se imprime el disparo 
+	PRINT_SHOT proc 
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 254d,cAzul,bgNegro
+		ret 
+	endp
+
+	;Manda a borrar el disparo. Se auxilia de col_aux y ren_aux
+	BORRA_DISPARO proc
+		mov al,[shot_col]
+		mov ah,[shot_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call DELETE_SHOT	
+		ret
+	endp
+
+	;borra el disparo. Se auxilia de col_aux y ren_aux
+	DELETE_SHOT proc 
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 178,cNegro,bgNegro
+		ret 
 	endp
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
