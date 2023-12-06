@@ -367,6 +367,7 @@ Disparar:
 	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
 	call IMPRIME_DISPARO        ;imprime el disparo
 Movimiento_disparo:
+	CALL DISPARO_EXITOSO_COL
 	CALL BORRA_DISPARO				;se borra el dispar
 	dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo 
 	CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
@@ -844,6 +845,44 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Imprime la nave del enemigo
+	DELETE_ENEMY proc
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		sub [ren_aux],2
+		
+		dec [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		
+		dec [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		
+		add [col_aux],3
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		inc [ren_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		dec [ren_aux]
+		
+		inc [col_aux]
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 219,cNegro,bgNegro
+		ret
+	endp
+
 	;procedimiento IMPRIME_BOTON
 	;Dibuja un boton que abarca 3 renglones y 5 columnas
 	;con un caracter centrado dentro del boton
@@ -949,6 +988,175 @@ salir:				;inicia etiqueta salir
 		posiciona_cursor [ren_aux],[col_aux]
 		imprime_caracter_color 178,cNegro,bgNegro
 		ret 
+	endp
+
+	BORRA_ENEMIGO proc
+		mov al,[enemy_col]
+		mov ah,[enemy_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call DELETE_ENEMY
+		ret
+	endp
+
+	DISPARO_EXITOSO_COL proc
+		mov al,[enemy_col]
+		mov ah,[enemy_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call SUCCESFUL_SHOT_COL
+		ret
+	endp
+
+	DISPARO_EXITOSO_REN proc
+		mov al,[enemy_col]
+		mov ah,[enemy_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call SUCCESFUL_SHOT_REN
+		ret
+	endp
+
+	SUCCESFUL_SHOT_COL proc
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		sub [ren_aux],2
+		dec [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		dec [ren_aux]
+		dec [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+		
+		add [col_aux],3
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+
+		dec [ren_aux]
+		inc [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov al,[shot_col]
+		cmp al,[col_aux]
+		je clear_shot_col
+		
+		ret
+		clear_shot_col:
+		call DISPARO_EXITOSO_REN
+		ret
+	endp
+
+	SUCCESFUL_SHOT_REN proC
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		sub [ren_aux],2
+		dec [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		dec [ren_aux]
+		dec [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+		
+		add [col_aux],3
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		inc [ren_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+
+		dec [ren_aux]
+		inc [col_aux]
+
+		posiciona_cursor [ren_aux],[col_aux]
+		mov ah,[shot_ren]
+		cmp ah,[ren_aux]
+		je clear_shot_ren
+		
+		ret
+		clear_shot_ren:
+		call BORRA_ENEMIGO
+		ret
 	endp
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
