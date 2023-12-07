@@ -149,6 +149,9 @@ no_mouse		db 	'No se encuentra driver de mouse. Presione [enter] para salir$'
 ;auxiliar para controlar la aparición de nuevos enemigos
 aux_nuevo_enemigo db 0
 
+;auxiliar para comprobar que exista nave enemiga
+aux_enemigo_existe db 1d
+
 ;Variables para pantalla de inicio
 carga_inicio 	db 		'PRESIONE [ENTER] PARA COMENZAR$'
 derechos      	db 		'TODOS LOS DERECHOS RESERVADOS $'	
@@ -357,6 +360,8 @@ imprime_ui:
 
 juego: 
 	lee_teclado
+	cmp [aux_enemigo_existe],0
+	je crearEnemigo
 	cmp al,64h			;compara que el valor ingresado sea 64h (d)
 	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
 	cmp al, 61h			;compara que el valor ingresado sea 61h (s)
@@ -390,10 +395,12 @@ Disparar:
 	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
 	call IMPRIME_DISPARO        ;imprime el disparo
 	Movimiento_disparo:
-		CALL BORRA_DISPARO				;se borra el dispar
+		CALL BORRA_DISPARO				;se borra el disparo
 		dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
-		CALL DISPARO_EXITOSO_COL		;verifica si el disparo fue exitoso 
 		CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
+		CALL DISPARO_EXITOSO_COL		;verifica si el disparo fue exitoso, para contabilizar el puntaje y llevar a cabo la destrucción y creación de nave enemiga en consecuencia
+		cmp [aux_nuevo_enemigo],1d
+		je borrarDisparoExitoso
 		cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
 		je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
 		lee_teclado					;lee teclado
@@ -406,6 +413,7 @@ Disparar:
 		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
 	
 borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
+	mov [aux_nuevo_enemigo],0d
 	call BORRA_DISPARO
 	jmp juego
 
@@ -421,6 +429,14 @@ mueveIzquierdaShot:
 	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la derecha 
 	jmp Movimiento_disparo
 
+borrarDisparoExitoso: ;borrar el disparo que impactó a la nave enemiga, para que no quede en la pantalla y regresa al flujo principal
+	mov [aux_nuevo_enemigo],0d
+	jmp juego
+
+crearEnemigo: ;imprime la nave enemiga en caso de que no exista
+	CALL NUEVO_ENEMIGO
+	mov [aux_enemigo_existe],1d
+	jmp juego
 
 ;En "mouse_no_clic" se revisa que el boton izquierdo del mouse no esté presionado
 ;Si el botón está suelto, continúa a la sección "mouse"
@@ -870,7 +886,7 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
-	;Imprime la nave del enemigo
+	;Borra la nave del enemigo
 	DELETE_ENEMY proc
 		posiciona_cursor [ren_aux],[col_aux]
 		imprime_caracter_color 219,cNegro,bgNegro
@@ -1019,6 +1035,7 @@ salir:				;inicia etiqueta salir
 		ret 
 	endp
 
+	;borra la nave enemiga. Se auxilia de col_aux y ren_aux
 	BORRA_ENEMIGO proc
 		mov al,[enemy_col]
 		mov ah,[enemy_ren]
@@ -1028,6 +1045,8 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Verifica si el disparo se encuentra en la misma columna que la nave enemiga. Se auxilia de col_aux y ren_aux
+	;En este procedimiento se obtiene la ubicación de la nave enemiga para posteriormente convocar al procedimiento que realizará la verificación a través del recorrido correspondiente
 	DISPARO_EXITOSO_COL proc
 		mov al,[enemy_col]
 		mov ah,[enemy_ren]
@@ -1037,6 +1056,8 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Verifica si el disparo se encuentra en el mismo renglón que la nave enemiga. Se auxilia de col_aux y ren_aux
+	;En este procedimiento se obtiene la ubicación de la nave enemiga para posteriormente convocar al procedimiento que realizará la verificación a través del recorrido correspondiente
 	DISPARO_EXITOSO_REN proc
 		mov al,[enemy_col]
 		mov ah,[enemy_ren]
@@ -1046,9 +1067,10 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Realiza el recorrido completo (con forma de la nave enemiga) para verificar si el disparo se encuentra en la misma columna que la nave enemiga
+	;En caso afirmativo, se convca al procedimiento que verifica el renglón.
 	SUCCESFUL_SHOT_COL proc
-		cmp [aux_nuevo_enemigo],3d
-		je clear_shot_col
+		
 		posiciona_cursor [ren_aux],[col_aux]
 		mov al,[shot_col]
 		cmp al,[col_aux]
@@ -1119,9 +1141,16 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Realiza el recorrido completo (con forma de la nave enemiga) para verificar si el disparo se encuentra en el mismo renglón que la nave enemiga
+	;Ya que a este procedimiento sólo se puede acceder al haber verificado la columna común, en caso de que exista coincidencia se determina un disparo exitoso
+	;Esto implica que la nave enemiga desaparezca, vuelva a aparecer, y que el puntaje se sume a las casillas correspondientes
+	;El disparo ocupa una sóla casilla. La nave ocupa 3 casillas de altura.
+	;Por lo tanto, el disparo recorrerá como máximo 3 veces la nave enemiga (ya que esta podría moverse de la posición del impacto inicial).
+	;En el impacto inicial, la nave enemiga desaparecerá. Se usa un contador auxiliar llamado aux_nuevo_enemigo para llevar la cuenta de movimientos tras el impacto inicial.
+	;Para asegurarse de que la nave no reaparezca tras el primer impacto, y que se contabilicen tres disparos exitosos, usaremos el auxiliar antes mencionado.
+	;Sólo tras 3 vueltas en las que se registre 
 	SUCCESFUL_SHOT_REN proC
-		cmp [aux_nuevo_enemigo],3d
-		je clear_shot_ren
+
 		posiciona_cursor [ren_aux],[col_aux]
 		mov ah,[shot_ren]
 		cmp ah,[ren_aux]
@@ -1188,18 +1217,14 @@ salir:				;inicia etiqueta salir
 		
 		ret
 		clear_shot_ren:
+		mov [aux_nuevo_enemigo],1d
 		call BORRA_ENEMIGO
-		inc [aux_nuevo_enemigo]
-		cmp [aux_nuevo_enemigo],4d
-		je new_enemy
-		ret
-		new_enemy:
-		CALL NUEVO_ENEMIGO
+		call BORRA_DISPARO
+		mov [aux_enemigo_existe],0
 		ret
 	endp
 
 	NUEVO_ENEMIGO proc
-		mov [aux_nuevo_enemigo],0
 		add [player_score],100
 		call IMPRIME_NUEVO_ENEMIGO
 		call IMPRIME_SCORE
