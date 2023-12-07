@@ -148,6 +148,17 @@ no_mouse		db 	'No se encuentra driver de mouse. Presione [enter] para salir$'
 
 ;auxiliar para controlar la aparición de nuevos enemigos
 aux_nuevo_enemigo db 0
+
+;Variables para pantalla de inicio
+carga_inicio 	db 		'PRESIONE [ENTER] PARA COMENZAR$'
+derechos      	db 		'TODOS LOS DERECHOS RESERVADOS $'	
+chilaquiles  	db 		'2023 ',00B8h ,' CHILAQUILES CON POLLO$'
+instrucciones 	db 		'INSTRUCCIONES$'
+instruccion1	db      'MOVER A LA DERECHA: [D]$'
+instruccion2	db 		'MOVER A LA IZQUIERDA: [S]$'
+instruccion3	db 		'DISPARAR: [ESPACIO]$'
+nota 			db 		'RECUERDA DESACTIVAR LAS MAYUSCULAS$'
+
 ;////////////////////////////////////////////////////
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -315,12 +326,22 @@ inicio:					;etiqueta inicio
 	inicializa_ds_es
 	comprueba_mouse		;macro para revisar driver de mouse
 	xor ax,0FFFFh		;compara el valor de AX con FFFFh, si el resultado es zero, entonces existe el driver de mouse
-	jz imprime_ui		;Si existe el driver del mouse, entonces salta a 'imprime_ui'
+	jz imprime_home_screen		;Si existe el driver del mouse, entonces salta a 'imprime_ui'
 	;Si no existe el driver del mouse entonces se muestra un mensaje
 	lea dx,[no_mouse]
 	mov ax,0900h	;opcion 9 para interrupcion 21h
 	int 21h			;interrupcion 21h. Imprime cadena.
 	jmp teclado		;salta a 'teclado'
+imprime_home_screen:
+	clear 					;limpia la pantalla 
+	oculta_cursor_teclado	;oculta cursor de la pantalla
+	apaga_cursor_parpadeo	;deshabilita parpadeo del cursor
+	call DIBUJA_HOME_SCREEN ;procedimiento que dibuja la pantalla de inicio del programa 
+	presiona_enter:			
+	lee_teclado				;lee la entrada del teclado
+	cmp al,0Dh				;compara la entrada de teclado si fue [enter]
+	jnz presiona_enter 		;Sale del ciclo hasta que presiona la tecla [enter]
+	muestra_cursor_mouse 
 imprime_ui:
 	clear 					;limpia pantalla
 	oculta_cursor_teclado	;oculta cursor del mouse
@@ -368,22 +389,21 @@ Disparar:
 	sub al, 3d                  ;posiciona  la columna 1 renglon arriba de la nave
 	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
 	call IMPRIME_DISPARO        ;imprime el disparo
-Movimiento_disparo:
-	
-	CALL BORRA_DISPARO				;se borra el dispar
-	dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
-	CALL DISPARO_EXITOSO_COL
-	CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
-	cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
-	je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
-	lee_teclado					;lee teclado
-	cmp al,64h					;compara que el valor ingresado sea 64h (d)
-	je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
-	cmp al, 61h					;compara que el valor ingresado sea 61h (s)
-	je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
-	mov ax, dx
-    cmp ax,[ticks]
-	jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
+	Movimiento_disparo:
+		CALL BORRA_DISPARO				;se borra el dispar
+		dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
+		CALL DISPARO_EXITOSO_COL		;verifica si el disparo fue exitoso 
+		CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
+		cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
+		je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
+		lee_teclado					;lee teclado
+		cmp al,64h					;compara que el valor ingresado sea 64h (d)
+		je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
+		cmp al, 61h					;compara que el valor ingresado sea 61h (s)
+		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
+		mov ax, dx
+	    cmp ax,[ticks]
+		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
 	
 borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
 	call BORRA_DISPARO
@@ -570,6 +590,8 @@ salir:				;inicia etiqueta salir
 		;imprimir título
 		posiciona_cursor 0,37
 		imprime_cadena_color [titulo],6,cAmarillo,bgNegro
+
+		call IMPRIME_ESTRELLAS
 
 		call IMPRIME_TEXTOS
 
@@ -947,16 +969,20 @@ salir:				;inicia etiqueta salir
 
 ;---------------------------------------------------------------
 	MUEVE_DERECHA proc
+		call DELETE_ESTRELLAS	;borra las estrellas 
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
-		inc [player_col]		;se incrementa 1 a [player_col] 
+		inc [player_col]		;se incrementa 1 a [player_col]
+		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
 		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
 		ret
 	endp
 
 	MUEVE_IZQUIERDA proc
+		call DELETE_ESTRELLAS	;borra las estrellas
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
-		dec [player_col]		;se decrementa 1 a [player_col] 
-		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
+		dec [player_col]		;se decrementa 1 a [player_col]
+		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
 		ret 
 	endp
 	;manda a imprimir el disparo. Se auxilia de col_aux y ren_aux
@@ -972,7 +998,7 @@ salir:				;inicia etiqueta salir
 	;se imprime el disparo 
 	PRINT_SHOT proc 
 		posiciona_cursor [ren_aux],[col_aux]
-		imprime_caracter_color 254d,cAzul,bgNegro
+		imprime_caracter_color 254d,cAzulClaro,bgNegro
 		ret 
 	endp
 
@@ -1191,6 +1217,262 @@ salir:				;inicia etiqueta salir
 		;Borrar posicion actual del enemigo y reiniciar su posicion
 		;Imprime enemigo
 		call IMPRIME_ENEMIGO
+		ret
+	endp
+
+	;procedimiento para imprimir la pantalla de inicio del juego 
+	DIBUJA_HOME_SCREEN proc
+		;imprimir esquina superior izquierda del marco
+		posiciona_cursor 0,0
+		imprime_caracter_color marcoEsqSupIzq,cAmarillo,bgNegro
+		
+		;imprimir esquina superior derecha del marco
+		posiciona_cursor 0,79
+		imprime_caracter_color marcoEsqSupDer,cAmarillo,bgNegro
+		
+		;imprimir esquina inferior izquierda del marco
+		posiciona_cursor 24,0
+		imprime_caracter_color marcoEsqInfIzq,cAmarillo,bgNegro
+		
+		;imprimir esquina inferior derecha del marco
+		posiciona_cursor 24,79
+		imprime_caracter_color marcoEsqInfDer,cAmarillo,bgNegro
+		
+		;imprimir marcos horizontales, superior e inferior
+		mov cx,78 		;CX = 004Eh => CH = 00h, CL = 4Eh 
+		horizontales:
+		mov [col_aux],cl
+		;Superior
+		posiciona_cursor 0,[col_aux]
+		imprime_caracter_color marcoHor,cAmarillo,bgNegro
+		;Inferior
+		posiciona_cursor 24,[col_aux]
+		imprime_caracter_color marcoHor,cAmarillo,bgNegro
+		
+		mov cl,[col_aux]
+		loop horizontales
+
+		;imprimir marcos verticales, derecho e izquierdo
+		mov cx,23 		;CX = 0017h => CH = 00h, CL = 17h 
+		verticales:
+		mov [ren_aux],cl
+		;Izquierdo
+		posiciona_cursor [ren_aux],0
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+		;Inferior
+		posiciona_cursor [ren_aux],79
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+		;Limite mouse
+		posiciona_cursor [ren_aux],lim_derecho+1
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+
+		mov cl,[ren_aux]
+		loop verticales
+
+		;imprime intersecciones interna	
+		posiciona_cursor 0,lim_derecho+1
+		imprime_caracter_color marcoCruceVerSup,cAmarillo,bgNegro
+		posiciona_cursor 24,lim_derecho+1
+		imprime_caracter_color marcoCruceVerInf,cAmarillo,bgNegro
+
+		;imprimir [X] para cerrar programa
+		posiciona_cursor 0,76
+		imprime_caracter_color '[',cAmarillo,bgNegro
+		posiciona_cursor 0,77
+		imprime_caracter_color 'X',cRojoClaro,bgNegro
+		posiciona_cursor 0,78
+		imprime_caracter_color ']',cAmarillo,bgNegro
+
+		;imprimir título
+		posiciona_cursor 9,17
+		imprime_cadena_color [titulo],6,cAzulClaro,bgNegro
+
+		;imprimir mensaje de inicio
+		posiciona_cursor 11,6
+		imprime_cadena_color [carga_inicio],30,cCyan,bgNegro
+
+		;imprime leyenda 
+		posiciona_cursor 13,7
+		imprime_cadena_color [chilaquiles],28,cBlanco,bgNegro
+		posiciona_cursor 15,6
+		imprime_cadena_color [derechos],29,cBlanco,bgNegro
+
+		;imprimir instrucciones
+		posiciona_cursor 2,lim_derecho+13
+		imprime_cadena_color [instrucciones],13,cCyan,bgNegro
+
+		posiciona_cursor 4,lim_derecho+3
+		imprime_cadena_color [instruccion1],23,cBlanco,bgNegro
+
+		posiciona_cursor 6,lim_derecho+3
+		imprime_cadena_color [instruccion2],25,cBlanco,bgNegro
+
+		posiciona_cursor 8,lim_derecho+3
+		imprime_cadena_color [instruccion3],19,cBlanco,bgNegro
+
+		;imprimir nota 
+		posiciona_cursor 11,lim_derecho+3
+		imprime_cadena_color [nota],34,cMagentaClaro,bgNegro
+
+		;imprimiendo estrellas 
+		call IMPRIME_ESTRELLAS
+		call IMPRIME_JUGADOR
+		ret 
+	endp
+
+	IMPRIME_ESTRELLAS proc
+		posiciona_cursor 2,6
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 2,20
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 3,30
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 4,10
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 4,26
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 5,37
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 6,5
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 6,15
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 7,24
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 8,2
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 8,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 9,7
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 10,21
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 10,32
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 11,3
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,38
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,12
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,26
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,6
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 15,2
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,17
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 16,10
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 16,25
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 17,4
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 17,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 18,19
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 18,30
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 19,7
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 19,37
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,12
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,22
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,32
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 21,3
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 21,27
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 22,8
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 22,35
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		ret
+	endp
+
+	DELETE_ESTRELLAS proc
+		posiciona_cursor 2,6
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 2,20
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 3,30
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 4,10
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 4,26
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 5,37
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 6,5
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 6,15
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 7,24
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 8,2
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 8,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 9,7
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 10,21
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 10,32
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 11,3
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,38
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,12
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,26
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,6
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 15,2
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,17
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 16,10
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 16,25
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 17,4
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 17,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 18,19
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 18,30
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 19,7
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 19,37
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,12
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,22
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,32
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 21,3
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 21,27
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 22,8
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 22,35
+		imprime_caracter_color 254d,cNegro,bgNegro
 		ret
 	endp
 
