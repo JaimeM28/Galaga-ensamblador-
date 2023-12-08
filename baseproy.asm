@@ -146,8 +146,22 @@ ocho			db 		8
 ;Cuando el driver del mouse no está disponible
 no_mouse		db 	'No se encuentra driver de mouse. Presione [enter] para salir$'
 
-;auxiliar para controlar la aparición de nuevos enemigos
-aux_nuevo_enemigo db 0
+;auxiliar para comprobar que exista nave enemiga
+aux_enemigo_existe db 1d
+
+;Auxiliar que se activa en caso de que un disparo del jugador sea exitoso
+aux_successfulShot db 0
+
+;Variables para pantalla de inicio
+carga_inicio 	db 		'PRESIONE [ENTER] PARA COMENZAR$'
+derechos      	db 		'TODOS LOS DERECHOS RESERVADOS $'	
+chilaquiles  	db 		'2023 ',00B8h ,' CHILAQUILES CON POLLO$'
+instrucciones 	db 		'INSTRUCCIONES$'
+instruccion1	db      'MOVER A LA DERECHA: [D]$'
+instruccion2	db 		'MOVER A LA IZQUIERDA: [S]$'
+instruccion3	db 		'DISPARAR: [ESPACIO]$'
+nota 			db 		'RECUERDA DESACTIVAR LAS MAYUSCULAS$'
+
 ;////////////////////////////////////////////////////
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -315,12 +329,22 @@ inicio:					;etiqueta inicio
 	inicializa_ds_es
 	comprueba_mouse		;macro para revisar driver de mouse
 	xor ax,0FFFFh		;compara el valor de AX con FFFFh, si el resultado es zero, entonces existe el driver de mouse
-	jz imprime_ui		;Si existe el driver del mouse, entonces salta a 'imprime_ui'
+	jz imprime_home_screen		;Si existe el driver del mouse, entonces salta a 'imprime_ui'
 	;Si no existe el driver del mouse entonces se muestra un mensaje
 	lea dx,[no_mouse]
 	mov ax,0900h	;opcion 9 para interrupcion 21h
 	int 21h			;interrupcion 21h. Imprime cadena.
 	jmp teclado		;salta a 'teclado'
+imprime_home_screen:
+	clear 					;limpia la pantalla 
+	oculta_cursor_teclado	;oculta cursor de la pantalla
+	apaga_cursor_parpadeo	;deshabilita parpadeo del cursor
+	call DIBUJA_HOME_SCREEN ;procedimiento que dibuja la pantalla de inicio del programa 
+	presiona_enter:			
+	lee_teclado				;lee la entrada del teclado
+	cmp al,0Dh				;compara la entrada de teclado si fue [enter]
+	jnz presiona_enter 		;Sale del ciclo hasta que presiona la tecla [enter]
+	muestra_cursor_mouse 
 imprime_ui:
 	clear 					;limpia pantalla
 	oculta_cursor_teclado	;oculta cursor del mouse
@@ -336,6 +360,8 @@ imprime_ui:
 
 juego: 
 	lee_teclado
+	cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
+	je crearEnemigo		;Saltamos al proceso para crear enemigo
 	cmp al,64h			;compara que el valor ingresado sea 64h (d)
 	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
 	cmp al, 61h			;compara que el valor ingresado sea 61h (s)
@@ -368,22 +394,23 @@ Disparar:
 	sub al, 3d                  ;posiciona  la columna 1 renglon arriba de la nave
 	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
 	call IMPRIME_DISPARO        ;imprime el disparo
-Movimiento_disparo:
-	
-	CALL BORRA_DISPARO				;se borra el dispar
-	dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
-	CALL DISPARO_EXITOSO_COL
-	CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
-	cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
-	je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
-	lee_teclado					;lee teclado
-	cmp al,64h					;compara que el valor ingresado sea 64h (d)
-	je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
-	cmp al, 61h					;compara que el valor ingresado sea 61h (s)
-	je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
-	mov ax, dx
-    cmp ax,[ticks]
-	jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
+	Movimiento_disparo:
+		CALL BORRA_DISPARO				;se borra el disparo
+		dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
+		CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
+		CALL DISPARO_EXITOSO			;verifica si el disparo fue exitoso, para contabilizar el puntaje y llevar a cabo la destrucción y creación de nave enemiga en consecuencia
+		cmp [aux_successfulShot],1d		;en caso de que el el disparo sea exitoso, [aux_successfulShot]=1
+		je disparoExitoso			;si la condición anterior es cierta, interrumpe el flujo para borrar el disparo y reinicar su posición
+		cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
+		je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
+		lee_teclado					;lee teclado
+		cmp al,64h					;compara que el valor ingresado sea 64h (d)
+		je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
+		cmp al, 61h					;compara que el valor ingresado sea 61h (s)
+		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
+		mov ax, dx
+	    cmp ax,[ticks]
+		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
 	
 borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
 	call BORRA_DISPARO
@@ -401,6 +428,17 @@ mueveIzquierdaShot:
 	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la derecha 
 	jmp Movimiento_disparo
 
+disparoExitoso: 				;proceso que se lleva a cabo cuando un disparo es exitoso
+	call BORRA_ENEMIGO			;llama a la función para borrar al enemigo
+	call BORRA_DISPARO			;llama a la función para borrar el disparo
+	mov [aux_enemigo_existe],0	;apaga la variable que indica la existencia del enemigo
+	mov [aux_successfulShot],0d	;reinicia (apaga) la variable que indica un disparo exitoso
+	jmp juego					;retoma el flujo en juego
+
+crearEnemigo: ;imprime la nave enemiga en caso de que no exista. La variable [aux_enemigo_existe] se vuelve 1 para indicar que la nave enemiga sí existe.
+	CALL NUEVO_ENEMIGO
+	mov [aux_enemigo_existe],1d
+	jmp juego
 
 ;En "mouse_no_clic" se revisa que el boton izquierdo del mouse no esté presionado
 ;Si el botón está suelto, continúa a la sección "mouse"
@@ -570,6 +608,8 @@ salir:				;inicia etiqueta salir
 		;imprimir título
 		posiciona_cursor 0,37
 		imprime_cadena_color [titulo],6,cAmarillo,bgNegro
+
+		call IMPRIME_ESTRELLAS
 
 		call IMPRIME_TEXTOS
 
@@ -848,7 +888,7 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
-	;Imprime la nave del enemigo
+	;Borra la nave del enemigo
 	DELETE_ENEMY proc
 		posiciona_cursor [ren_aux],[col_aux]
 		imprime_caracter_color 219,cNegro,bgNegro
@@ -947,16 +987,20 @@ salir:				;inicia etiqueta salir
 
 ;---------------------------------------------------------------
 	MUEVE_DERECHA proc
+		call DELETE_ESTRELLAS	;borra las estrellas 
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
-		inc [player_col]		;se incrementa 1 a [player_col] 
+		inc [player_col]		;se incrementa 1 a [player_col]
+		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
 		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
 		ret
 	endp
 
 	MUEVE_IZQUIERDA proc
+		call DELETE_ESTRELLAS	;borra las estrellas
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
-		dec [player_col]		;se decrementa 1 a [player_col] 
-		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
+		dec [player_col]		;se decrementa 1 a [player_col]
+		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
 		ret 
 	endp
 	;manda a imprimir el disparo. Se auxilia de col_aux y ren_aux
@@ -972,7 +1016,7 @@ salir:				;inicia etiqueta salir
 	;se imprime el disparo 
 	PRINT_SHOT proc 
 		posiciona_cursor [ren_aux],[col_aux]
-		imprime_caracter_color 254d,cAzul,bgNegro
+		imprime_caracter_color 254d,cAzulClaro,bgNegro
 		ret 
 	endp
 
@@ -993,6 +1037,7 @@ salir:				;inicia etiqueta salir
 		ret 
 	endp
 
+	;borra la nave enemiga. Se auxilia de col_aux y ren_aux
 	BORRA_ENEMIGO proc
 		mov al,[enemy_col]
 		mov ah,[enemy_ren]
@@ -1002,195 +1047,377 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
-	DISPARO_EXITOSO_COL proc
+	;Verifica si el disparo se encuentra en la misma columna que la nave enemiga. Se auxilia de col_aux y ren_aux
+	;En este procedimiento se obtiene la ubicación de la nave enemiga para posteriormente convocar al procedimiento que realizará la verificación a través del recorrido correspondiente
+	;Ya que no deseamos modificar las coordenadas originales del enemigo, emplearemos a [col_aux] y a [ren_aux] para llevarlo a cabo
+	DISPARO_EXITOSO proc
 		mov al,[enemy_col]
 		mov ah,[enemy_ren]
 		mov [col_aux],al
 		mov [ren_aux],ah
-		call SUCCESFUL_SHOT_COL
+		call SUCCESFUL_SHOT
 		ret
 	endp
 
-	DISPARO_EXITOSO_REN proc
-		mov al,[enemy_col]
-		mov ah,[enemy_ren]
-		mov [col_aux],al
-		mov [ren_aux],ah
-		call SUCCESFUL_SHOT_REN
+	;Realiza el recorrido del espacio que ocupa la nave enemiga. 
+	;En caso de que el disparo comparta la misma posición que alguna parte de la nave enemiga, activa la bandera [aux_successfulShot]
+	SUCCESFUL_SHOT proc
+		
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		sub [ren_aux],2					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		dec [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		dec [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		dec [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+		
+		add [col_aux],3					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		dec [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		inc [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		successful_shot_end:
 		ret
 	endp
 
-	SUCCESFUL_SHOT_COL proc
-		cmp [aux_nuevo_enemigo],3d
-		je clear_shot_col
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
+	;realiza las comparaciones pertintentes entre las coordenadas del disparo y de la nave enemiga
+	;se ocupa a [col_aux] y a [col_ren] para representar la columna y renglón del enemigo
+    SUCCESSFUL_SHOT_COL_REN proc
+        mov al,[shot_col]				;al=columna que ocupa el disparo
+        cmp al,[col_aux]				;¿al=columna que ocupa el enemigo?
+        je clear_shot_col				;si lo anterior es cierto, la primer condición del disparo exitoso se cumple y saltamos a la siguiente comprobación
+        jmp get_out_failure				;si no fue cierto, el disparo falló y saltamos al final fallido
+        clear_shot_col:					;sección donde la columna de disparo es la misma que la nave enemiga
+            mov ah,[shot_ren]			;ah=renglón que ocupa el disparo
+            cmp ah,[ren_aux]			;¿ah=renglón que ocupa el enemigo?
+            je get_out_success			;si lo anterior es cierto, la segunda y última condición del disparo exitoso se cumple y saltamos al final exitoso
+            jmp get_out_failure			;si no fue cierto, el disparo falló y saltamos al final fallido
+        get_out_success:				;final exitoso
+            mov [aux_successfulShot],1	;activamos la variable que representa el éxito en el disparo del jugador
+            ret						
+        get_out_failure:				;final fallido
+            mov [aux_successfulShot],0	;mantenemos apagada a la variable que representa el éxito en el disparo del jugador
+            ret
+    endp
 
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		sub [ren_aux],2
-		dec [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		dec [ren_aux]
-		dec [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-		
-		add [col_aux],3
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-
-		dec [ren_aux]
-		inc [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov al,[shot_col]
-		cmp al,[col_aux]
-		je clear_shot_col
-		
-		ret
-		clear_shot_col:
-		call DISPARO_EXITOSO_REN
-		ret
-	endp
-
-	SUCCESFUL_SHOT_REN proC
-		cmp [aux_nuevo_enemigo],3d
-		je clear_shot_ren
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		sub [ren_aux],2
-		dec [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		dec [ren_aux]
-		dec [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-		
-		add [col_aux],3
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		inc [ren_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-
-		dec [ren_aux]
-		inc [col_aux]
-
-		posiciona_cursor [ren_aux],[col_aux]
-		mov ah,[shot_ren]
-		cmp ah,[ren_aux]
-		je clear_shot_ren
-		
-		ret
-		clear_shot_ren:
-		call BORRA_ENEMIGO
-		inc [aux_nuevo_enemigo]
-		cmp [aux_nuevo_enemigo],4d
-		je new_enemy
-		ret
-		new_enemy:
-		CALL NUEVO_ENEMIGO
-		ret
-	endp
-
+	;procedimiento que se lleva a cabo en caso de que se requiera un nuevo enemigo
 	NUEVO_ENEMIGO proc
-		mov [aux_nuevo_enemigo],0
-		add [player_score],100
-		call IMPRIME_NUEVO_ENEMIGO
-		call IMPRIME_SCORE
-		mov ax,[player_score]
-		cmp ax,[player_hiscore]
-		ja new_hiscore
+		add [player_score],100			;se aumenta la puntuación del jugador
+		call IMPRIME_NUEVO_ENEMIGO		;se solicita la impresión de un nuevo enemigo
+		call IMPRIME_SCORE				;se solicita la impresión del marcador actualizado
+		mov ax,[player_score]			;ax=puntuación del jugador
+		cmp ax,[player_hiscore]			;se compara la puntuación actual y la máxima
+		ja new_hiscore					;si la puntuación actual es mayor que la máxima, saltamos a la sección de actualización
 		ret
-		new_hiscore:
-		mov [player_hiscore],ax
-		call IMPRIME_HISCORE
+		new_hiscore:					;sección de actualización de la puntuación máxima
+		mov [player_hiscore],ax			;puntuación máxima = puntuación actual
+		call IMPRIME_HISCORE			;se imprime en pantalla dicha puntuación máxima
 		ret
 	endp
 
+	;Imprime al enemigo nuevamente
 	IMPRIME_NUEVO_ENEMIGO proc
 		;Borrar posicion actual del enemigo y reiniciar su posicion
 		;Imprime enemigo
 		call IMPRIME_ENEMIGO
+		ret
+	endp
+
+	;procedimiento para imprimir la pantalla de inicio del juego 
+	DIBUJA_HOME_SCREEN proc
+		;imprimir esquina superior izquierda del marco
+		posiciona_cursor 0,0
+		imprime_caracter_color marcoEsqSupIzq,cAmarillo,bgNegro
+		
+		;imprimir esquina superior derecha del marco
+		posiciona_cursor 0,79
+		imprime_caracter_color marcoEsqSupDer,cAmarillo,bgNegro
+		
+		;imprimir esquina inferior izquierda del marco
+		posiciona_cursor 24,0
+		imprime_caracter_color marcoEsqInfIzq,cAmarillo,bgNegro
+		
+		;imprimir esquina inferior derecha del marco
+		posiciona_cursor 24,79
+		imprime_caracter_color marcoEsqInfDer,cAmarillo,bgNegro
+		
+		;imprimir marcos horizontales, superior e inferior
+		mov cx,78 		;CX = 004Eh => CH = 00h, CL = 4Eh 
+		horizontales:
+		mov [col_aux],cl
+		;Superior
+		posiciona_cursor 0,[col_aux]
+		imprime_caracter_color marcoHor,cAmarillo,bgNegro
+		;Inferior
+		posiciona_cursor 24,[col_aux]
+		imprime_caracter_color marcoHor,cAmarillo,bgNegro
+		
+		mov cl,[col_aux]
+		loop horizontales
+
+		;imprimir marcos verticales, derecho e izquierdo
+		mov cx,23 		;CX = 0017h => CH = 00h, CL = 17h 
+		verticales:
+		mov [ren_aux],cl
+		;Izquierdo
+		posiciona_cursor [ren_aux],0
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+		;Inferior
+		posiciona_cursor [ren_aux],79
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+		;Limite mouse
+		posiciona_cursor [ren_aux],lim_derecho+1
+		imprime_caracter_color marcoVer,cAmarillo,bgNegro
+
+		mov cl,[ren_aux]
+		loop verticales
+
+		;imprime intersecciones interna	
+		posiciona_cursor 0,lim_derecho+1
+		imprime_caracter_color marcoCruceVerSup,cAmarillo,bgNegro
+		posiciona_cursor 24,lim_derecho+1
+		imprime_caracter_color marcoCruceVerInf,cAmarillo,bgNegro
+
+		;imprimir [X] para cerrar programa
+		posiciona_cursor 0,76
+		imprime_caracter_color '[',cAmarillo,bgNegro
+		posiciona_cursor 0,77
+		imprime_caracter_color 'X',cRojoClaro,bgNegro
+		posiciona_cursor 0,78
+		imprime_caracter_color ']',cAmarillo,bgNegro
+
+		;imprimir título
+		posiciona_cursor 9,17
+		imprime_cadena_color [titulo],6,cAzulClaro,bgNegro
+
+		;imprimir mensaje de inicio
+		posiciona_cursor 11,6
+		imprime_cadena_color [carga_inicio],30,cCyan,bgNegro
+
+		;imprime leyenda 
+		posiciona_cursor 13,7
+		imprime_cadena_color [chilaquiles],28,cBlanco,bgNegro
+		posiciona_cursor 15,6
+		imprime_cadena_color [derechos],29,cBlanco,bgNegro
+
+		;imprimir instrucciones
+		posiciona_cursor 2,lim_derecho+13
+		imprime_cadena_color [instrucciones],13,cCyan,bgNegro
+
+		posiciona_cursor 4,lim_derecho+3
+		imprime_cadena_color [instruccion1],23,cBlanco,bgNegro
+
+		posiciona_cursor 6,lim_derecho+3
+		imprime_cadena_color [instruccion2],25,cBlanco,bgNegro
+
+		posiciona_cursor 8,lim_derecho+3
+		imprime_cadena_color [instruccion3],19,cBlanco,bgNegro
+
+		;imprimir nota 
+		posiciona_cursor 11,lim_derecho+3
+		imprime_cadena_color [nota],34,cMagentaClaro,bgNegro
+
+		;imprimiendo estrellas 
+		call IMPRIME_ESTRELLAS
+		call IMPRIME_JUGADOR
+		ret 
+	endp
+
+	IMPRIME_ESTRELLAS proc
+		posiciona_cursor 2,6
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 2,20
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 3,30
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 4,10
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 4,26
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 5,37
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 6,5
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 6,15
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 7,24
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 8,2
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 8,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 9,7
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 10,21
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 10,32
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 11,3
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,38
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,12
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 12,26
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,6
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 15,2
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 14,17
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 16,10
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 16,25
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 17,4
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 17,34
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 18,19
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 18,30
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 19,7
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 19,37
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,12
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,22
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 20,32
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 21,3
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 21,27
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 22,8
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		posiciona_cursor 22,35
+		imprime_caracter_color 254d,cGrisClaro,bgNegro
+		ret
+	endp
+
+	DELETE_ESTRELLAS proc
+		posiciona_cursor 2,6
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 2,20
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 3,30
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 4,10
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 4,26
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 5,37
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 6,5
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 6,15
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 7,24
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 8,2
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 8,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 9,7
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 10,21
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 10,32
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 11,3
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,38
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,12
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 12,26
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,6
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 15,2
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 14,17
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 16,10
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 16,25
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 17,4
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 17,34
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 18,19
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 18,30
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 19,7
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 19,37
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,12
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,22
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 20,32
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 21,3
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 21,27
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 22,8
+		imprime_caracter_color 254d,cNegro,bgNegro
+		posiciona_cursor 22,35
+		imprime_caracter_color 254d,cNegro,bgNegro
 		ret
 	endp
 
