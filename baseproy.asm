@@ -417,16 +417,7 @@ juego:
     ; Ahora, los ticks del sistema están en CX:DX
     mov ax, dx
     cmp ax,[ticks]
-	jne juego ;ciclo infinito realizado con los ticks
-
-	; Esperar 1 segundo
-	mov cx, 0
-	mov dx, 1000
-	mov ah, 86h
-	int 15h
-
-	; Llamar a la función lee_teclado
-	lee_teclado
+	jne juego ;ciclo infinito realizado con los ticks 
 
 
 mueveArribaEnemigo:
