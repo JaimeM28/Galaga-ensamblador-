@@ -158,7 +158,7 @@ derechos      	db 		'TODOS LOS DERECHOS RESERVADOS $'
 chilaquiles  	db 		'2023 ',00B8h ,' CHILAQUILES CON POLLO$'
 instrucciones 	db 		'INSTRUCCIONES$'
 instruccion1	db      'MOVER A LA DERECHA: [D]$'
-instruccion2	db 		'MOVER A LA IZQUIERDA: [S]$'
+instruccion2	db 		'MOVER A LA IZQUIERDA: [A]$'
 instruccion3	db 		'DISPARAR: [ESPACIO]$'
 nota 			db 		'RECUERDA DESACTIVAR LAS MAYUSCULAS$'
 
@@ -309,17 +309,46 @@ endm
 
 ;valida si se puede hacer movimiento a la derecha
 validar_derecha macro 
-	mov al, [player_col]  	;se mueve [palyer_col] a ax
+	mov al, [player_col]  	;se mueve [player_col] a ax
+	inc al					;se incrementa 1 a ax
+	cmp al, 38				;se valida que el movimiento no sobrepase el limite derecho del juego (39-1)
+endm
+
+;Valida si el enemigo puede hacer un movimiento a la derecha
+validar_derecha_enemigo macro
+	mov al, [enemy_col]  	;se mueve [enemy_col] a ax
 	inc al					;se incrementa 1 a ax
 	cmp al, 38				;se valida que el movimiento no sobrepase el limite derecho del juego (39-1)
 endm
 
 ;valida si se puede hacer movimiento a la izquierda
 validar_izquierda macro
-	mov al, [player_col]  	;se mueve [palyer_col] a ax
+	mov al, [player_col]  	;se mueve [player_col] a ax
 	dec al					;se decrementa 1 a ax
 	cmp al, 2				;se valida que el movimiento no sobrepase el limite izquiedo del juego (1+1)
 endm
+
+;valida si se puede hacer movimiento a la izquierda
+validar_izquierda_enemigo macro
+	mov al, [enemy_col]  	;se mueve [player_col] a ax
+	dec al					;se decrementa 1 a ax
+	cmp al, 2				;se valida que el movimiento no sobrepase el limite izquiedo del juego (1+1)
+endm
+
+;valida si el enemigo puede hacer movimiento hacia arriba
+validar_arriba_enemigo macro
+	mov al, [enemy_ren]		;se mueve [enemy_ren] a ax
+	inc al					;se incremente 1 a ax
+	cmp al, 2				;se valida que el movimiento no sobrepase el limite superior del juego (1+1)
+endm
+
+;valida si el enemigo puede hacer movimiento hacia abajo
+validar_abajo_enemigo macro
+	mov al, [enemy_ren]		;se mueve [enemy_ren] a ax
+	dec al					;se decrementa 1 a ax
+	cmp al, 10				;se valida que el movimiento no sobrepase el limite inferior del juego establecido (10)
+endm
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;Fin Macros;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -364,16 +393,53 @@ juego:
 	je crearEnemigo		;Saltamos al proceso para crear enemigo
 	cmp al,64h			;compara que el valor ingresado sea 64h (d)
 	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
-	cmp al, 61h			;compara que el valor ingresado sea 61h (s)
-	je mueveIzquierda	;salto a mueveIzquierda si se presiono la s
+	cmp al, 61h			;compara que el valor ingresado sea 61h (a)
+	je mueveIzquierda	;salto a mueveIzquierda si se presiono la a
 	cmp al,20h 			;Compara que el valor ingresado sea 20h (espacio)
 	je Disparar 		;salto a Disparar si se presiono espacio
+
+
+	;Codigo temporal
+		;Movimiento de la nave una vez el jugador disparo
+		cmp al, 108
+		je mueveDerechaEnemigo			;Mover nave enemiga a la derecha con teccla 'l'
+		cmp al, 106
+		je mueveIzquierdaEnemigo		;Mover nave enemiga a la izquierda con teccla 'j'
+		cmp al, 105
+		je mueveArribaEnemigo			;Mover nave enemiga hacia arriba con teccla 'i'
+		cmp al, 107
+		je mueveAbajoEnemigo			;Mover nave enemiga hacia abajo con teccla 'k'
+
+
+
 	mov ah, 0 			;Función 0: Configurar temporizador
     int 1Ah   			;Llamar a la interrupción 1Ah
     ; Ahora, los ticks del sistema están en CX:DX
     mov ax, dx
     cmp ax,[ticks]
-	jne juego ;ciclo infinito realizado con los ticks 
+	jne juego ;ciclo infinito realizado con los ticks
+
+	; Esperar 1 segundo
+	mov cx, 0
+	mov dx, 1000
+	mov ah, 86h
+	int 15h
+
+	; Llamar a la función lee_teclado
+	lee_teclado
+
+
+mueveArribaEnemigo:
+	validar_arriba_enemigo		;valida que no sobrepase el limite superior el enemigo
+	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_ARRIBA_ENEMIGO	;si no sobrepasa el limite, se mueve hacia arriba 
+	jmp juego					;se hace salto a juego
+
+mueveAbajoEnemigo:
+	validar_abajo_enemigo		;valida que no sobrepase el limite inferior el enemigo
+	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_ABAJO_ENEMIGO	;si no sobrepasa el limite, se mueve hacia abajo 
+	jmp juego					;se hace salto a juego
 
 mueveDerecha:
 	validar_derecha			;valida que no sobrepase el limite derecho
@@ -381,11 +447,23 @@ mueveDerecha:
 	CALL MUEVE_DERECHA		;si no sobrepasa el limite, se mueve a la derecha 
 	jmp juego				;se hace salto a juego
 
+mueveDerechaEnemigo:
+	validar_derecha_enemigo		;valida que no sobrepase el limite derecho el enemigo
+	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA_ENEMIGO	;si no sobrepasa el limite, se mueve a la derecha 
+	jmp juego					;se hace salto a juego
+
 mueveIzquierda:
 	validar_izquierda		;valida que no sobrepese el limite izquierdo
 	je juego				;si sobrepasa el limite, se devuelve el flujo a juego 
 	CALL MUEVE_IZQUIERDA	;si no sobrepasa el limite, se mueve a la izquierda
-	jmp juego
+	jmp juego				;se hace salto a juego
+
+mueveIzquierdaEnemigo:
+	validar_izquierda_enemigo		;valida que no sobrepese el limite izquierdo el enemigo
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA_ENEMIGO	;si no sobrepasa el limite, se mueve a la izquierda
+	jmp juego						;se hace salto a juego
 
 Disparar: 
 	mov al, [player_col] 		;Copia player_col en al
@@ -406,8 +484,23 @@ Disparar:
 		lee_teclado					;lee teclado
 		cmp al,64h					;compara que el valor ingresado sea 64h (d)
 		je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
-		cmp al, 61h					;compara que el valor ingresado sea 61h (s)
-		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la s
+		cmp al, 61h					;compara que el valor ingresado sea 61h (a)
+		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la a
+		
+
+		;Codigo temporal
+			;Movimiento de la nave una vez el jugador disparo
+			cmp al, 108
+			je mueveDerechaShotEnemigo			;Mover nave enemiga a la derecha con teccla 'l'
+			cmp al, 106
+			je mueveIzquierdaShotEnemigo		;Mover nave enemiga a la izquierda con teccla 'j'
+			cmp al, 105
+			je mueveArribaShotEnemigo			;Mover nave enemiga hacia arriba con teccla 'i'
+			cmp al, 107
+			je mueveAbajoShotEnemigo			;Mover nave enemiga hacia abajo con teccla 'k'
+
+
+
 		mov ax, dx
 	    cmp ax,[ticks]
 		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
@@ -422,11 +515,35 @@ mueveDerechaShot:
 	CALL MUEVE_DERECHA          ;si no sobrepasa el limite, se mueve a la derecha 
 	jmp Movimiento_disparo		;se hace salto 
 
+mueveDerechaShotEnemigo:
+	validar_derecha_enemigo		;valida que no sobrepase el limite derecho del enemigo
+	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA_ENEMIGO	;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo		;se hace salto 
+
 mueveIzquierdaShot:
-	validar_izquierda			;valida que no sobrepase el limite derecho
+	validar_izquierda			;valida que no sobrepase el limite izquierdo
 	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
-	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la derecha 
-	jmp Movimiento_disparo
+	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la izquierda 
+	jmp Movimiento_disparo		;se hace salto 
+
+mueveIzquierdaShotEnemigo:
+	validar_izquierda_enemigo		;valida que no sobrepase el limite derecho del enemigo
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA_ENEMIGO	;si no sobrepasa el limite, se mueve a la izquierda 
+	jmp Movimiento_disparo			;se hace salto 
+
+mueveArribaShotEnemigo:
+	validar_arriba_enemigo		;valida que no sobrepase el limite superior del enemigo
+	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ARRIBA_ENEMIGO	;si no sobrepasa el limite, se mueve hacia arriba
+	jmp Movimiento_disparo		;se hace salto
+
+mueveAbajoShotEnemigo:
+	validar_abajo_enemigo		;valida que no sobrepase el limite inferior del enemigo
+	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ABAJO_ENEMIGO	;si no sobrepasa el limite, se mueve hacia abajo
+	jmp Movimiento_disparo		;se hace salto
 
 disparoExitoso: 				;proceso que se lleva a cabo cuando un disparo es exitoso
 	call BORRA_ENEMIGO			;llama a la función para borrar al enemigo
@@ -967,6 +1084,15 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	BORRA_ENEMIGO proc
+		mov al,[enemy_col]
+		mov ah,[enemy_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call DELETE_ENEMY
+		ret
+	endp
+
 	IMPRIME_JUGADOR proc
 		mov al,[player_col]
 		mov ah,[player_ren]
@@ -986,23 +1112,72 @@ salir:				;inicia etiqueta salir
 	endp
 
 ;---------------------------------------------------------------
+	MUEVE_ARRIBA_ENEMIGO proc
+		call DELETE_ESTRELLAS	;borra las estrellas 
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el jugador	
+		dec [enemy_ren]			;se decrementa 1 a [enemy_ren]
+		call IMPRIME_ESTRELLAS	;imprime las estrellas antes de la nave
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
+		ret
+	endp
+
+	MUEVE_ABAJO_ENEMIGO proc
+		call DELETE_ESTRELLAS	;borra las estrellas 
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el jugador	
+		inc [enemy_ren]			;se incrementa 1 a [enemy_ren]
+		call IMPRIME_ESTRELLAS	;imprime las estrellas antes de la nave
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
+		ret
+	endp
+
 	MUEVE_DERECHA proc
 		call DELETE_ESTRELLAS	;borra las estrellas 
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el ememigo	
 		inc [player_col]		;se incrementa 1 a [player_col]
 		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
 		call IMPRIME_JUGADOR	;se vuelve a imprimri jugador 
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
+		ret
+	endp
+
+	MUEVE_DERECHA_ENEMIGO proc
+		call DELETE_ESTRELLAS	;borra las estrellas
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el ememigo	
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el enemigo
+		inc [enemy_col]			;se incrementa 1 a [enemy_col]
+		call IMPRIME_ESTRELLAS	;imprime las estrellas antes de la nave
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
 		ret
 	endp
 
 	MUEVE_IZQUIERDA proc
 		call DELETE_ESTRELLAS	;borra las estrellas
 		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el enemigo
 		dec [player_col]		;se decrementa 1 a [player_col]
 		call IMPRIME_ESTRELLAS 	;imprime las estrellas antes de la nave
 		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
 		ret 
 	endp
+
+	MUEVE_IZQUIERDA_ENEMIGO proc
+		call DELETE_ESTRELLAS	;borra las estrellas
+		call BORRA_ENEMIGO		;si no lo sobrepasa, hará el movimiento, para ello primero se borra el jugador	
+		call BORRA_JUGADOR		;si no lo sobrepasa, hará el movimiento, para ello despues se borra el jugador
+		dec [enemy_col]			;se decrementa 1 a [enemy_col]
+		call IMPRIME_ESTRELLAS	;imprime las estrellas antes de la nave
+		call IMPRIME_ENEMIGO	;se vuelve a imprimir enemigo
+		call IMPRIME_JUGADOR	;se vuelve a imprimir jugador 
+		ret
+	endp
+
 	;manda a imprimir el disparo. Se auxilia de col_aux y ren_aux
 	IMPRIME_DISPARO proc
 		mov al,[shot_col]
@@ -1037,15 +1212,6 @@ salir:				;inicia etiqueta salir
 		ret 
 	endp
 
-	;borra la nave enemiga. Se auxilia de col_aux y ren_aux
-	BORRA_ENEMIGO proc
-		mov al,[enemy_col]
-		mov ah,[enemy_ren]
-		mov [col_aux],al
-		mov [ren_aux],ah
-		call DELETE_ENEMY
-		ret
-	endp
 
 	;Verifica si el disparo se encuentra en la misma columna que la nave enemiga. Se auxilia de col_aux y ren_aux
 	;En este procedimiento se obtiene la ubicación de la nave enemiga para posteriormente convocar al procedimiento que realizará la verificación a través del recorrido correspondiente
