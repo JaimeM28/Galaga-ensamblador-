@@ -73,27 +73,30 @@ hiscore_col 	equ 	lim_derecho+7
 score_ren	 	equ 	13
 score_col 		equ 	lim_derecho+7
 
+;Valores de botones en general
+botones_ren		equ     19
+
 ;Botón STOP
 stop_col 		equ 	lim_derecho+10
-stop_ren 		equ 	19
+stop_ren 		equ 	botones_ren
 stop_izq 		equ 	stop_col-1
-stop_der 		equ 	stop_col+1
+stop_der 		equ 	stop_col+2
 stop_sup 		equ 	stop_ren-1
-stop_inf 		equ 	stop_ren+1
+stop_inf 		equ 	stop_ren+2
 
 ;Botón PAUSE
 pause_col 		equ 	stop_col+10
-pause_ren 		equ 	19
+pause_ren 		equ 	botones_ren
 pause_izq 		equ 	pause_col-1
-pause_der 		equ 	pause_col+1
+pause_der 		equ 	pause_col+2
 pause_sup 		equ 	pause_ren-1
 pause_inf 		equ 	pause_ren+1
 
 ;Botón PLAY
 play_col 		equ 	pause_col+10
-play_ren 		equ 	19
+play_ren 		equ 	botones_ren
 play_izq 		equ 	play_col-1
-play_der 		equ 	play_col+1
+play_der 		equ 	play_col+2
 play_sup 		equ 	play_ren-1
 play_inf 		equ 	play_ren+1
 
@@ -179,7 +182,7 @@ endm
 posiciona_cursor macro renglon,columna
 	mov dh,renglon	;dh = renglon
 	mov dl,columna	;dl = columna
-	mov bx,0
+	mov bx,0;
 	mov ax,0200h 	;preparar ax para interrupcion, opcion 02h
 	int 10h 		;interrupcion 10h y opcion 02h. Cambia posicion del cursor
 endm 
@@ -375,19 +378,29 @@ imprime_home_screen:				;Impresion de la pantalla al iniciar
 	jnz presiona_enter 				;Sale del ciclo hasta que presiona la tecla [enter]
 	muestra_cursor_mouse
 imprime_ui:
-	clear 							;limpia pantalla
-	oculta_cursor_teclado			;oculta cursor del mouse
-	apaga_cursor_parpadeo 			;Deshabilita parpadeo del cursor
-	call DIBUJA_UI 					;procedimiento que dibuja marco de la interfaz
-	muestra_cursor_mouse 			;hace visible el cursor del mouse
-	mov ah, 0 						;Función 0: Configurar temporizador
-    int 1Ah   						;Llamar a la interrupción 1Ah
+	clear 					;limpia pantalla
+	oculta_cursor_teclado	;oculta cursor del mouse
+	apaga_cursor_parpadeo 	;Deshabilita parpadeo del cursor
+	call DIBUJA_UI 			;procedimiento que dibuja marco de la interfaz
+	muestra_cursor_mouse 	;hace visible el cursor del mouse
+	mov ah, 0 				; Función 0: Configurar temporizador
+    int 1Ah   				; Llamar a la interrupción 1Ah
+
     ; Ahora, los ticks del sistema están en CX:DX
     mov ax, dx						;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
     mov [ticks], ax 				;Guardar los ticks en la variable 'ticks'
 	jmp juego						;Saltamos a la etiqueta juego
 
 juego: 
+	; limpiar registros
+	xor dx, dx
+	xor cx, cx
+
+	; lee si el click izquierdo esta apretado, en tal caso salta a conversion_mouse
+	lee_mouse
+	test bx,0001h
+	jnz conversion_mouse
+
 	mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
     int 21h							;interrupcion 21h
     cmp al, 0                       ;Compara el valor obtenido en el registro AL con 0
@@ -606,34 +619,112 @@ conversion_mouse:
 	test bx,0001h 		;Para revisar si el boton izquierdo del mouse fue presionado
 	jz mouse 			;Si el boton izquierdo no fue presionado, vuelve a leer el estado del mouse
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;Aqui va la lógica de la posicion del mouse;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;Aqui va la lógica de la posicion del mouse;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	;Si el mouse fue presionado en el renglon 0
 	;se va a revisar si fue dentro del boton [X]
 	cmp dx,0
 	je boton_x
 
-	jmp mouse_no_clic
-boton_x:
-	jmp boton_x1
+	; verificar limite superior
+	; si fue en el renglon del boton stop
+	cmp dx, botones_ren ; mismo renglon para stop, pause y play
+	jge botones_verifica_limite_inferior ; si es del renglon desde donde incian los botones hacia abajo salta
 
+	jmp return_to_juego ; en caso de que no sea, se ejecuta el juego con normalidad
+
+
+; Verifica si el click se ha dado antes o en el limite inferior del area de botones
+botones_verifica_limite_inferior:
+	cmp dx,stop_inf
+	jbe botones_handler ; si esta antes o dentro del limite inferior se sigue ejecutando
+	jmp return_to_juego ; en caso contrario se sigue ejecutando el juego
+
+
+; Verifica de derecha a izquierda que columna limite izquierda fue seleccionado
+botones_handler:
+	; boton play
+	cmp cx,play_izq
+	jg boton_play
+
+	; boton pause
+	cmp cx,pause_izq
+	jg boton_pause
+
+	; boton stop
+	cmp cx,stop_izq
+	jg boton_stop
+
+	jmp return_to_juego
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;    FUNCIONAMIENTO BOTON [X] (CERRRAR)    ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Lógica para revisar si el mouse fue presionado en [X]
 ;[X] se encuentra en renglon 0 y entre columnas 76 y 78
-boton_x1:
+boton_x:
 	cmp cx,76
 	jge boton_x2
-	jmp mouse_no_clic
+	jmp return_to_juego
 boton_x2:
 	cmp cx,78
 	jbe boton_x3
-	jmp mouse_no_clic
+	jmp return_to_juego
 boton_x3:
 	;Se cumplieron todas las condiciones
 	jmp salir
 
-mas_botones:
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON STOP          ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_stop:
+	cmp cx,stop_der
+	jbe boton_stop_run
+	jmp return_to_juego
+; Acciona el procedimiento para cuando se presiona STOP
+boton_stop_run:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_STOP
+	jmp inicio
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON PAUSE         ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_pause:
+	cmp cx,pause_der
+	jbe boton_pause_run
+	jmp return_to_juego
+
+; Acciona el procedimiento para cuando se presiona PAUSE
+boton_pause_run:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_PAUSE
+	; sirve para hacer una pausa forzada haciendo que este a la espera de un click
 	jmp mouse_no_clic
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON PLAY          ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_play:
+	cmp cx,play_der
+	jbe boton_play_run
+	jmp return_to_juego
+
+; Acciona el procedimiento para cuando se presiona PLAY
+boton_play_run:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_PLAY
+	jmp return_to_juego
+
+; se presiona el click sobre algun area que no tiene boton
+return_to_juego:
+	jmp juego
+
+
 
 ;Si no se encontró el driver del mouse, muestra un mensaje y el usuario debe salir tecleando [enter]
 teclado:
@@ -1602,6 +1693,76 @@ salir:				;inicia etiqueta salir
 		imprime_caracter_color 254d,cNegro,bgNegro
 		posiciona_cursor 22,35
 		imprime_caracter_color 254d,cNegro,bgNegro
+		ret
+	endp
+
+
+	; Acciones que se ejecutaran al presionar el boton STOP
+	PUSH_BOTON_STOP proc
+	 	call BORRA_DISPARO
+		call BORRA_ENEMIGO
+		call IMPRIME_NUEVO_ENEMIGO
+		call DATOS_INICIALES
+		call HOVER_BOTON_STOP
+		ret
+	endp
+
+	; Acciones que se ejecutaran al presionar el boton PAUSE
+	PUSH_BOTON_PAUSE proc
+		call BORRA_DISPARO
+		call HOVER_BOTON_PAUSE
+		ret
+	endp
+
+	; Acciones que se ejecutaran al presionar el boton PLAY
+	PUSH_BOTON_PLAY proc
+		call BORRA_DISPARO
+		call IMPRIME_BOTONES
+		ret
+	endp
+
+	HOVER_BOTON_PAUSE proc
+		;Botón STOP
+		mov [boton_caracter],254d		;Carácter '■'
+		mov [boton_color],bgAmarillo 	;Background amarillo
+		mov [boton_renglon],stop_ren 	;Renglón en "stop_ren"
+		mov [boton_columna],stop_col 	;Columna en "stop_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
+		;Botón PAUSE
+		mov [boton_caracter],19d 		;Carácter '‼'
+		mov [boton_color],bgAzul 	;Background amarillo
+		mov [boton_renglon],pause_ren 	;Renglón en "pause_ren"
+		mov [boton_columna],pause_col 	;Columna en "pause_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
+		;Botón PLAY
+		mov [boton_caracter],16d  		;Carácter '►'
+		mov [boton_color],bgAmarillo 	;Background amarillo
+		mov [boton_renglon],play_ren 	;Renglón en "play_ren"
+		mov [boton_columna],play_col 	;Columna en "play_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
+		ret
+	endp
+
+
+	HOVER_BOTON_STOP proc
+		;Botón STOP
+		mov [boton_caracter],254d		;Carácter '■'
+		mov [boton_color],bgAzul 	;Background amarillo
+		mov [boton_renglon],stop_ren 	;Renglón en "stop_ren"
+		mov [boton_columna],stop_col 	;Columna en "stop_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
+		;Botón PAUSE
+		mov [boton_caracter],19d 		;Carácter '‼'
+		mov [boton_color],bgAmarillo 	;Background amarillo
+		mov [boton_renglon],pause_ren 	;Renglón en "pause_ren"
+		mov [boton_columna],pause_col 	;Columna en "pause_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
+		;Botón PLAY
+		mov [boton_caracter],16d  		;Carácter '►'
+		mov [boton_color],bgAmarillo 	;Background amarillo
+		mov [boton_renglon],play_ren 	;Renglón en "play_ren"
+		mov [boton_columna],play_col 	;Columna en "play_col"
+		call IMPRIME_BOTON 				;Procedimiento para imprimir el botón
 		ret
 	endp
 
