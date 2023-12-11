@@ -296,15 +296,15 @@ endm
 
 ;comprueba_mouse - Revisa si el driver del mouse existe
 comprueba_mouse 	macro
-	mov ax,0		;opcion 0
-	int 33h			;llama interrupcion 33h para manejo del mouse, devuelve un valor en AX
-					;Si AX = 0000h, no existe el driver. Si AX = FFFFh, existe driver
+	mov ax,0				;opcion 0
+	int 33h					;llama interrupcion 33h para manejo del mouse, devuelve un valor en AX
+							;Si AX = 0000h, no existe el driver. Si AX = FFFFh, existe driver
 endm
 ;--------------------------------------------------------------------------------
 ;lee la entrada por teclado y la guarda en al
 lee_teclado macro 
-	mov ah,08h 			;Opcion 8 para interrupción 21h (entrada por teclado)
-	int 21h				;Interrupción 21h 
+	mov ah,08h 				;Opcion 8 para interrupción 21h (entrada por teclado)
+	int 21h					;Interrupción 21h 
 endm
 
 ;valida si se puede hacer movimiento a la derecha
@@ -354,111 +354,113 @@ endm
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.code
-inicio:					;etiqueta inicio
-	inicializa_ds_es
-	comprueba_mouse		;macro para revisar driver de mouse
-	xor ax,0FFFFh		;compara el valor de AX con FFFFh, si el resultado es zero, entonces existe el driver de mouse
-	jz imprime_home_screen		;Si existe el driver del mouse, entonces salta a 'imprime_ui'
+inicio:								;etiqueta inicio
+	inicializa_ds_es				;Inicializa el valor del registro DS y ES
+	comprueba_mouse					;macro para revisar driver de mouse
+	xor ax,0FFFFh					;compara el valor de AX con FFFFh, si el resultado es zero, entonces existe el driver de mouse
+	jz imprime_home_screen			;Si existe el driver del mouse, entonces salta a 'imprime_ui'
 	;Si no existe el driver del mouse entonces se muestra un mensaje
 	lea dx,[no_mouse]
-	mov ax,0900h	;opcion 9 para interrupcion 21h
-	int 21h			;interrupcion 21h. Imprime cadena.
-	jmp teclado		;salta a 'teclado'
-imprime_home_screen:
-	clear 					;limpia la pantalla 
-	oculta_cursor_teclado	;oculta cursor de la pantalla
-	apaga_cursor_parpadeo	;deshabilita parpadeo del cursor
-	call DIBUJA_HOME_SCREEN ;procedimiento que dibuja la pantalla de inicio del programa 
-	presiona_enter:			
-	lee_teclado				;lee la entrada del teclado
-	cmp al,0Dh				;compara la entrada de teclado si fue [enter]
-	jnz presiona_enter 		;Sale del ciclo hasta que presiona la tecla [enter]
-	muestra_cursor_mouse 
+	mov ax,0900h					;opcion 9 para interrupcion 21h
+	int 21h							;interrupcion 21h. Imprime cadena.
+	jmp teclado						;salta a 'teclado'
+imprime_home_screen:				;Impresion de la pantalla al iniciar
+	clear 							;limpia la pantalla 
+	oculta_cursor_teclado			;oculta cursor de la pantalla
+	apaga_cursor_parpadeo			;deshabilita parpadeo del cursor
+	call DIBUJA_HOME_SCREEN 		;procedimiento que dibuja la pantalla de inicio del programa 
+	presiona_enter:					;Tecla para la pantalla de inicio
+	lee_teclado						;lee la entrada del teclado
+	cmp al,0Dh						;compara la entrada de teclado si fue [enter]
+	jnz presiona_enter 				;Sale del ciclo hasta que presiona la tecla [enter]
+	muestra_cursor_mouse
 imprime_ui:
-	clear 					;limpia pantalla
-	oculta_cursor_teclado	;oculta cursor del mouse
-	apaga_cursor_parpadeo 	;Deshabilita parpadeo del cursor
-	call DIBUJA_UI 			;procedimiento que dibuja marco de la interfaz
-	muestra_cursor_mouse 	;hace visible el cursor del mouse
-	mov ah, 0 				; Función 0: Configurar temporizador
-    int 1Ah   				; Llamar a la interrupción 1Ah
+	clear 							;limpia pantalla
+	oculta_cursor_teclado			;oculta cursor del mouse
+	apaga_cursor_parpadeo 			;Deshabilita parpadeo del cursor
+	call DIBUJA_UI 					;procedimiento que dibuja marco de la interfaz
+	muestra_cursor_mouse 			;hace visible el cursor del mouse
+	mov ah, 0 						;Función 0: Configurar temporizador
+    int 1Ah   						;Llamar a la interrupción 1Ah
     ; Ahora, los ticks del sistema están en CX:DX
-    mov ax, dx
-    mov [ticks], ax 		; Guardar los ticks en la variable 'ticks'
-	jmp juego
+    mov ax, dx						;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
+    mov [ticks], ax 				;Guardar los ticks en la variable 'ticks'
+	jmp juego						;Saltamos a la etiqueta juego
 
 juego: 
 	mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
     int 21h							;interrupcion 21h
-    cmp al, 0                       ; 
-	je NomovimientoJuego
-	cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
-	je crearEnemigo		;Saltamos al proceso para crear enemigo
-	lee_teclado
-	cmp al,64h			;compara que el valor ingresado sea 64h (d)
-	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
-	cmp al, 61h			;compara que el valor ingresado sea 61h (a)
-	je mueveIzquierda	;salto a mueveIzquierda si se presiono la a
-	cmp al,20h 			;Compara que el valor ingresado sea 20h (espacio)
-	je Disparar 		;salto a Disparar si se presiono espacio
-	jmp siMovimientoJuego
+    cmp al, 0                       ;Compara el valor obtenido en el registro AL con 0
+	je NomovimientoJuego			;En caso de que no se haya pulsado una tecla, vamos a la etiqueta NomovimientoJuego
+	cmp [aux_enemigo_existe],0 		;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
+	je crearEnemigo					;Saltamos al proceso para crear enemigo
+	lee_teclado						;Caso contrario (que se haya pulsado alguna tecla) leeremos la entrada del teclado
+	cmp al,64h						;compara que el valor ingresado sea 64h (d)
+	je mueveDerecha 				;Salto a mueveDerecha si se presiono la d
+	cmp al, 61h						;compara que el valor ingresado sea 61h (a)
+	je mueveIzquierda				;salto a mueveIzquierda si se presiono la a
+	cmp al,20h 						;Compara que el valor ingresado sea 20h (espacio)
+	je Disparar 					;salto a Disparar si se presiono espacio
+	jmp siMovimientoJuego			;Salto a la etiqueta siMovimientoJuego para que continue el flujo
+	;En caso de que no exista alguna tecla inicia la etiqueta NomovimientoJuego
 	NomovimientoJuego:
-		cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
-		je crearEnemigo		;Saltamos al proceso para crear enemigo
-		mov ecx, 1500000  ; 1 segundo en microsegundos
-			esperarJuego:
-				nop
-				loop esperarJuego
-	;Codigo temporal
-		;Movimiento de la nave una vez el jugador disparo
-		mov ah,2Ch
-		int 21h
-		cmp dl,40d
-		jb mueveIzquierdaEnemigo
-		cmp dl,80d
-		jb mueveDerechaEnemigo
-		cmp dl,90d
-		jb mueveArribaEnemigo
-		cmp dl,100d
-		jb mueveAbajoEnemigo
+		cmp [aux_enemigo_existe],0 	;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
+		je crearEnemigo				;Saltamos al proceso para crear enemigo
+		;Movimiento fluido en el juego
+		mov ecx, 1500000  			;1 segundo en microsegundos
+		esperarJuego:			;Bucle que nos permite que el juego tenga su continuidad
+			nop					;Es una instrucción que no realiza ninguna operación
+			loop esperarJuego	;Procedemos a realizar el loop hasta que sea 0
+		;Movimiento de la nave de forma aleatoria
+		mov ah,2Ch					;Regresa en dl un valor de 0 a 99 dependiendo del reloj del sistema
+		int 21h						;Dependiendo del valor obtenido en la linea anterior, podemos realizar el movimiento aleatorio del enemigo
+		cmp dl,40d					;En caso de que dl sea menor a 40, se moverá el enemigo a la izquierda
+		jb mueveIzquierdaEnemigo	;Enemigo moviendose a la izquierda
+		cmp dl,80d					;En caso de que dl sea menor a 80, se moverá el enemigo a la derecha
+		jb mueveDerechaEnemigo		;Enemigo moviendose a la derecha
+		cmp dl,90d					;En caso de que dl sea menor a 90, se moverá el enemigo hacia arriba 
+		jb mueveArribaEnemigo		;Enemigo moviendose hacia arriba
+		cmp dl,100d					;En caso de que dl sea menor a 100, se moverá el enemigo hacia abajo
+		jb mueveAbajoEnemigo		;Enemigo moviendose hacia abajo
 
-	siMovimientoJuego:
-		mov ah, 0 			;Función 0: Configurar temporizador
-		int 1Ah   			;Llamar a la interrupción 1Ah
-		; Ahora, los ticks del sistema están en CX:DX
-		mov ax, dx
-		cmp ax,[ticks]
-		jne juego ;ciclo infinito realizado con los ticks
+		;Etiqueta en caso de que si exista un movimiento por parte del jugador usando teclado
+		siMovimientoJuego:
+			mov ah, 0 					;Función 0: Configurar temporizador
+			int 1Ah   					;Llamar a la interrupción 1Ah
+			; Ahora, los ticks del sistema están en CX:DX
+			mov ax, dx					;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
+			cmp ax,[ticks]				;Compara el valor de AX (ticks del sistema) con el valor almacenado en la dirección de memoria [ticks]
+			jne juego 					;ciclo infinito realizado con los ticks
 
 mueveArribaEnemigo:
-	validar_arriba_enemigo		;valida que no sobrepase el limite superior el enemigo
-	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_ARRIBA_ENEMIGO	;si no sobrepasa el limite, se mueve hacia arriba 
-	jmp juego					;se hace salto a juego
+	validar_arriba_enemigo			;valida que no sobrepase el limite superior el enemigo
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_ARRIBA_ENEMIGO		;si no sobrepasa el limite, se mueve hacia arriba 
+	jmp juego						;se hace salto a juego
 
 mueveAbajoEnemigo:
-	validar_abajo_enemigo		;valida que no sobrepase el limite inferior el enemigo
-	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_ABAJO_ENEMIGO	;si no sobrepasa el limite, se mueve hacia abajo 
-	jmp juego					;se hace salto a juego
+	validar_abajo_enemigo			;valida que no sobrepase el limite inferior el enemigo
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_ABAJO_ENEMIGO		;si no sobrepasa el limite, se mueve hacia abajo 
+	jmp juego						;se hace salto a juego
 
 mueveDerecha:
-	validar_derecha			;valida que no sobrepase el limite derecho
-	je juego				;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_DERECHA		;si no sobrepasa el limite, se mueve a la derecha 
-	jmp juego				;se hace salto a juego
+	validar_derecha					;valida que no sobrepase el limite derecho
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA				;si no sobrepasa el limite, se mueve a la derecha 
+	jmp juego						;se hace salto a juego
 
 mueveDerechaEnemigo:
-	validar_derecha_enemigo		;valida que no sobrepase el limite derecho el enemigo
-	je juego					;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_DERECHA_ENEMIGO	;si no sobrepasa el limite, se mueve a la derecha 
-	jmp juego					;se hace salto a juego
+	validar_derecha_enemigo			;valida que no sobrepase el limite derecho el enemigo
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA_ENEMIGO		;si no sobrepasa el limite, se mueve a la derecha 
+	jmp juego						;se hace salto a juego
 
 mueveIzquierda:
-	validar_izquierda		;valida que no sobrepese el limite izquierdo
-	je juego				;si sobrepasa el limite, se devuelve el flujo a juego 
-	CALL MUEVE_IZQUIERDA	;si no sobrepasa el limite, se mueve a la izquierda
-	jmp juego				;se hace salto a juego
+	validar_izquierda				;valida que no sobrepese el limite izquierdo
+	je juego						;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA			;si no sobrepasa el limite, se mueve a la izquierda
+	jmp juego						;se hace salto a juego
 
 mueveIzquierdaEnemigo:
 	validar_izquierda_enemigo		;valida que no sobrepese el limite izquierdo el enemigo
@@ -467,76 +469,81 @@ mueveIzquierdaEnemigo:
 	jmp juego						;se hace salto a juego
 
 Disparar: 
-	mov al, [player_col] 		;Copia player_col en al
-	mov [shot_col], al          ;Copia [player_col] en shot_col. Posicionar la columna del disparo donde esta la nave 
-	mov al, [player_ren]		;Copia player_ren en al
-	sub al, 3d                  ;posiciona  la columna 1 renglon arriba de la nave
-	mov [shot_ren], al          ;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
-	call IMPRIME_DISPARO        ;imprime el disparo
-	Movimiento_disparo:
+	mov al, [player_col] 				;Copia player_col en al
+	mov [shot_col], al          		;Copia [player_col] en shot_col. Posicionar la columna del disparo donde esta la nave 
+	mov al, [player_ren]				;Copia player_ren en al
+	sub al, 3d                 			;posiciona  la columna 1 renglon arriba de la nave
+	mov [shot_ren], al          		;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
+	call IMPRIME_DISPARO       			;imprime el disparo
+	;Movimiento del disparo para que solo exista uno a la vez
+	Movimiento_disparo:		
 		CALL BORRA_DISPARO				;se borra el disparo
 		dec [shot_ren]					;se decrementa el renglo del disparo, para subirlo
 		CALL IMPRIME_DISPARO			;se vuele a imprimir el disparo
 		CALL DISPARO_EXITOSO			;verifica si el disparo fue exitoso, para contabilizar el puntaje y llevar a cabo la destrucción y creación de nave enemiga en consecuencia
 		cmp [aux_successfulShot],1d		;en caso de que el el disparo sea exitoso, [aux_successfulShot]=1
-		je disparoExitoso			;si la condición anterior es cierta, interrumpe el flujo para borrar el disparo y reinicar su posición
+		je disparoExitoso				;si la condición anterior es cierta, interrumpe el flujo para borrar el disparo y reinicar su posición
 		cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
-		je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
+		je borrarDisparo				;si lo sobrepasa, regresa al flujo principal
 		mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
     	int 21h							;interrupcion 21h
-    	cmp al, 0                       ; 
-    	je Nomovimiento
-		lee_teclado					;lee teclado
-		cmp al,64h					;compara que el valor ingresado sea 64h (d)
-		je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
-		cmp al, 61h					;compara que el valor ingresado sea 61h (a)
-		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la a
-		jmp siMovimiento
+    	cmp al, 0                       ;Compara el valor obtenido en el registro AL con 0
+    	je Nomovimiento					;En caso de que no se haya pulsado una tecla, vamos a la etiqueta Nomovimiento
+		lee_teclado						;lee teclado
+		cmp al,64h						;compara que el valor ingresado sea 64h (d)
+		je mueveDerechaShot 			;Salto a mueveDerecha si se presiono la d
+		cmp al, 61h						;compara que el valor ingresado sea 61h (a)
+		je mueveIzquierdaShot			;salto a mueveIzquierda si se presiono la a
+		jmp siMovimiento				;Salto a la etiqueta siMovimiento para que continue el flujo
+		;En caso de que no exista alguna tecla inicia la etiqueta Nomovimiento
 		Nomovimiento:
-			mov ecx, 1500000  ; 1 segundo en microsegundos
-			esperar:
-				nop
-				loop esperar
-			;Movimiento de la nave una vez el jugador disparo
-			mov ah,2Ch
-			int 21h
-			cmp dl,40d
-			jb mueveIzquierdaShotEnemigo
-			cmp dl,80d
-			jb mueveDerechaShotEnemigo
-			cmp dl,90d
-			jb mueveArribaShotEnemigo
-			cmp dl,100d
-			jb mueveAbajoShotEnemigo
+			;Movimiento fluido en el juego
+			mov ecx, 1500000  			;1 segundo en microsegundos
+			esperar:					;Bucle que nos permite que el juego tenga su continuidad
+				nop						;Es una instrucción que no realiza ninguna operación
+				loop esperar			;Procedemos a realizar el loop hasta que sea 0
+			;Movimiento de la nave de forma aleatoria una vez el jugador disparó
+			mov ah,2Ch					;Regresa en dl un valor de 0 a 99 dependiendo del reloj del sistema
+			int 21h						;Dependiendo del valor obtenido en la linea anterior, podemos realizar el movimiento aleatorio del enemigo
+			cmp dl,40d					;En caso de que dl sea menor a 40, se moverá el enemigo a la izquierda
+			jb mueveIzquierdaShotEnemigo;Enemigo moviendose a la izquierda
+			cmp dl,80d					;En caso de que dl sea menor a 80, se moverá el enemigo a la derecha
+			jb mueveDerechaShotEnemigo	;Enemigo moviendose a la derecha
+			cmp dl,90d					;En caso de que dl sea menor a 90, se moverá el enemigo hacia arriba 
+			jb mueveArribaShotEnemigo	;Enemigo moviendose hacia arriba
+			cmp dl,100d					;En caso de que dl sea menor a 100, se moverá el enemigo hacia abajo
+			jb mueveAbajoShotEnemigo	;Enemigo moviendose hacia abajo
 
+		;Etiqueta en caso de que si exista un movimiento por parte del jugador usando teclado
 		siMovimiento:
-		mov ah, 0 			;Función 0: Configurar temporizador
-	    int 1Ah   			;Llamar a la interrupción 1Ah
-		mov ax, dx
-	    cmp ax,[ticks]
-		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
+			mov ah, 0 					;Función 0: Configurar temporizador
+			int 1Ah   					;Llamar a la interrupción 1Ah
+			; Ahora, los ticks del sistema están en CX:DX
+			mov ax, dx					;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
+			cmp ax,[ticks]				;Compara el valor de AX (ticks del sistema) con el valor almacenado en la dirección de memoria [ticks]
+			jne Movimiento_disparo		;ciclo infinito realizado con los ticks
 	
 borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
 	call BORRA_DISPARO
 	jmp juego
 
 mueveDerechaShot:
-	validar_derecha				;valida que no sobrepase el limite derecho
-	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_DERECHA          ;si no sobrepasa el limite, se mueve a la derecha 
-	jmp Movimiento_disparo		;se hace salto 
+	validar_derecha					;valida que no sobrepase el limite derecho
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA          	;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo			;se hace salto 
 
 mueveDerechaShotEnemigo:
-	validar_derecha_enemigo		;valida que no sobrepase el limite derecho del enemigo
-	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego
-	CALL MUEVE_DERECHA_ENEMIGO	;si no sobrepasa el limite, se mueve a la derecha 
-	jmp Movimiento_disparo		;se hace salto 
+	validar_derecha_enemigo			;valida que no sobrepase el limite derecho del enemigo
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA_ENEMIGO		;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo			;se hace salto 
 
 mueveIzquierdaShot:
-	validar_izquierda			;valida que no sobrepase el limite izquierdo
-	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
-	CALL MUEVE_IZQUIERDA		;si no sobrepasa el limite, se mueve a la izquierda 
-	jmp Movimiento_disparo		;se hace salto 
+	validar_izquierda				;valida que no sobrepase el limite izquierdo
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA			;si no sobrepasa el limite, se mueve a la izquierda 
+	jmp Movimiento_disparo			;se hace salto 
 
 mueveIzquierdaShotEnemigo:
 	validar_izquierda_enemigo		;valida que no sobrepase el limite derecho del enemigo
@@ -545,23 +552,23 @@ mueveIzquierdaShotEnemigo:
 	jmp Movimiento_disparo			;se hace salto 
 
 mueveArribaShotEnemigo:
-	validar_arriba_enemigo		;valida que no sobrepase el limite superior del enemigo
-	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
-	CALL MUEVE_ARRIBA_ENEMIGO	;si no sobrepasa el limite, se mueve hacia arriba
-	jmp Movimiento_disparo		;se hace salto
+	validar_arriba_enemigo			;valida que no sobrepase el limite superior del enemigo
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ARRIBA_ENEMIGO		;si no sobrepasa el limite, se mueve hacia arriba
+	jmp Movimiento_disparo			;se hace salto
 
 mueveAbajoShotEnemigo:
-	validar_abajo_enemigo		;valida que no sobrepase el limite inferior del enemigo
-	je Movimiento_disparo		;si sobrepasa el limite, se devuelve el flujo a juego 
-	CALL MUEVE_ABAJO_ENEMIGO	;si no sobrepasa el limite, se mueve hacia abajo
-	jmp Movimiento_disparo		;se hace salto
+	validar_abajo_enemigo			;valida que no sobrepase el limite inferior del enemigo
+	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ABAJO_ENEMIGO		;si no sobrepasa el limite, se mueve hacia abajo
+	jmp Movimiento_disparo			;se hace salto
 
-disparoExitoso: 				;proceso que se lleva a cabo cuando un disparo es exitoso
-	call BORRA_ENEMIGO			;llama a la función para borrar al enemigo
-	call BORRA_DISPARO			;llama a la función para borrar el disparo
-	mov [aux_enemigo_existe],0	;apaga la variable que indica la existencia del enemigo
-	mov [aux_successfulShot],0d	;reinicia (apaga) la variable que indica un disparo exitoso
-	jmp juego					;retoma el flujo en juego
+disparoExitoso: 					;proceso que se lleva a cabo cuando un disparo es exitoso
+	call BORRA_ENEMIGO				;llama a la función para borrar al enemigo
+	call BORRA_DISPARO				;llama a la función para borrar el disparo
+	mov [aux_enemigo_existe],0		;apaga la variable que indica la existencia del enemigo
+	mov [aux_successfulShot],0d		;reinicia (apaga) la variable que indica un disparo exitoso
+	jmp juego						;retoma el flujo en juego
 
 crearEnemigo: ;imprime la nave enemiga en caso de que no exista. La variable [aux_enemigo_existe] se vuelve 1 para indicar que la nave enemiga sí existe.
 	CALL NUEVO_ENEMIGO
