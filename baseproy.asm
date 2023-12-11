@@ -388,6 +388,10 @@ imprime_ui:
 	jmp juego
 
 juego: 
+	mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
+    int 21h							;interrupcion 21h
+    cmp al, 0                       ; 
+	je NomovimientoJuego
 	lee_teclado
 	cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
 	je crearEnemigo		;Saltamos al proceso para crear enemigo
@@ -397,28 +401,32 @@ juego:
 	je mueveIzquierda	;salto a mueveIzquierda si se presiono la a
 	cmp al,20h 			;Compara que el valor ingresado sea 20h (espacio)
 	je Disparar 		;salto a Disparar si se presiono espacio
-
-
+	jmp siMovimientoJuego
+	NomovimientoJuego:
+		mov ecx, 1500000  ; 1 segundo en microsegundos
+			esperarJuego:
+				nop
+				loop esperarJuego
 	;Codigo temporal
 		;Movimiento de la nave una vez el jugador disparo
-		cmp al, 108
-		je mueveDerechaEnemigo			;Mover nave enemiga a la derecha con teccla 'l'
-		cmp al, 106
-		je mueveIzquierdaEnemigo		;Mover nave enemiga a la izquierda con teccla 'j'
-		cmp al, 105
-		je mueveArribaEnemigo			;Mover nave enemiga hacia arriba con teccla 'i'
-		cmp al, 107
-		je mueveAbajoEnemigo			;Mover nave enemiga hacia abajo con teccla 'k'
+		mov ah,2Ch
+		int 21h
+		cmp dl,40d
+		jb mueveIzquierdaEnemigo
+		cmp dl,80d
+		jb mueveDerechaEnemigo
+		cmp dl,90d
+		jb mueveArribaEnemigo
+		cmp dl,100d
+		jb mueveAbajoEnemigo
 
-
-
-	mov ah, 0 			;Función 0: Configurar temporizador
-    int 1Ah   			;Llamar a la interrupción 1Ah
-    ; Ahora, los ticks del sistema están en CX:DX
-    mov ax, dx
-    cmp ax,[ticks]
-	jne juego ;ciclo infinito realizado con los ticks 
-
+	siMovimientoJuego:
+		mov ah, 0 			;Función 0: Configurar temporizador
+		int 1Ah   			;Llamar a la interrupción 1Ah
+		; Ahora, los ticks del sistema están en CX:DX
+		mov ax, dx
+		cmp ax,[ticks]
+		jne juego ;ciclo infinito realizado con los ticks
 
 mueveArribaEnemigo:
 	validar_arriba_enemigo		;valida que no sobrepase el limite superior el enemigo
@@ -472,26 +480,36 @@ Disparar:
 		je disparoExitoso			;si la condición anterior es cierta, interrumpe el flujo para borrar el disparo y reinicar su posición
 		cmp [shot_ren], lim_superior 	;se valida que no sobrepase el limite superior
 		je borrarDisparo						;si lo sobrepasa, regresa al flujo principal
+		mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
+    	int 21h							;interrupcion 21h
+    	cmp al, 0                       ; 
+    	je Nomovimiento
 		lee_teclado					;lee teclado
 		cmp al,64h					;compara que el valor ingresado sea 64h (d)
 		je mueveDerechaShot 		;Salto a mueveDerecha si se presiono la d
 		cmp al, 61h					;compara que el valor ingresado sea 61h (a)
 		je mueveIzquierdaShot		;salto a mueveIzquierda si se presiono la a
-		
-
-		;Codigo temporal
+		jmp siMovimiento
+		Nomovimiento:
+			mov ecx, 1500000  ; 1 segundo en microsegundos
+			esperar:
+				nop
+				loop esperar
 			;Movimiento de la nave una vez el jugador disparo
-			cmp al, 108
-			je mueveDerechaShotEnemigo			;Mover nave enemiga a la derecha con teccla 'l'
-			cmp al, 106
-			je mueveIzquierdaShotEnemigo		;Mover nave enemiga a la izquierda con teccla 'j'
-			cmp al, 105
-			je mueveArribaShotEnemigo			;Mover nave enemiga hacia arriba con teccla 'i'
-			cmp al, 107
-			je mueveAbajoShotEnemigo			;Mover nave enemiga hacia abajo con teccla 'k'
+			mov ah,2Ch
+			int 21h
+			cmp dl,40d
+			jb mueveIzquierdaShotEnemigo
+			cmp dl,80d
+			jb mueveDerechaShotEnemigo
+			cmp dl,90d
+			jb mueveArribaShotEnemigo
+			cmp dl,100d
+			jb mueveAbajoShotEnemigo
 
-
-
+		siMovimiento:
+		mov ah, 0 			;Función 0: Configurar temporizador
+	    int 1Ah   			;Llamar a la interrupción 1Ah
 		mov ax, dx
 	    cmp ax,[ticks]
 		jne Movimiento_disparo ;ciclo infinito realizado con los ticks 
