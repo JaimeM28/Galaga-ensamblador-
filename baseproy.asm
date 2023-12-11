@@ -628,14 +628,14 @@ conversion_mouse:
 	cmp dx, botones_ren ; mismo renglon para stop, pause y play
 	jge botones_verifica_limite_inferior ; si es del renglon desde donde incian los botones hacia abajo salta
 
-	jmp juego ; en caso de que no sea, se ejecuta el juego con normalidad
+	jmp return_to_juego ; en caso de que no sea, se ejecuta el juego con normalidad
 
 
 ; Verifica si el click se ha dado antes o en el limite inferior del area de botones
 botones_verifica_limite_inferior:
 	cmp dx,stop_inf
 	jbe botones_handler ; si esta antes o dentro del limite inferior se sigue ejecutando
-	jmp juego ; en caso contrario se sigue ejecutando el juego
+	jmp return_to_juego ; en caso contrario se sigue ejecutando el juego
 
 
 ; Verifica de derecha a izquierda que columna limite izquierda fue seleccionado
@@ -652,7 +652,7 @@ botones_handler:
 	cmp cx,stop_izq
 	jg boton_stop
 
-	jmp juego
+	jmp return_to_juego
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;    FUNCIONAMIENTO BOTON [X] (CERRRAR)    ;
@@ -662,11 +662,11 @@ botones_handler:
 boton_x:
 	cmp cx,76
 	jge boton_x2
-	jmp mouse_no_clic
+	jmp return_to_juego
 boton_x2:
 	cmp cx,78
 	jbe boton_x3
-	jmp mouse_no_clic
+	jmp return_to_juego
 boton_x3:
 	;Se cumplieron todas las condiciones
 	jmp salir
@@ -678,7 +678,7 @@ boton_x3:
 boton_stop:
 	cmp cx,stop_der
 	jbe boton_stop_run
-	jmp juego
+	jmp return_to_juego
 ; Acciona el procedimiento para cuando se presiona STOP
 boton_stop_run:
 	;Se cumplieron todas las condiciones
@@ -692,12 +692,13 @@ boton_stop_run:
 boton_pause:
 	cmp cx,pause_der
 	jbe boton_pause_run
-	jmp mouse_no_clic
+	jmp return_to_juego
 
 ; Acciona el procedimiento para cuando se presiona PAUSE
 boton_pause_run:
 	;Se cumplieron todas las condiciones
 	call PUSH_BOTON_PAUSE
+	; sirve para hacer una pausa forzada haciendo que este a la espera de un click
 	jmp mouse_no_clic
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -707,13 +708,18 @@ boton_pause_run:
 boton_play:
 	cmp cx,play_der
 	jbe boton_play_run
-	jmp mouse_no_clic
+	jmp return_to_juego
 
 ; Acciona el procedimiento para cuando se presiona PLAY
 boton_play_run:
 	;Se cumplieron todas las condiciones
 	call PUSH_BOTON_PLAY
+	jmp return_to_juego
+
+; se presiona el click sobre algun area que no tiene boton
+return_to_juego:
 	jmp juego
+
 
 
 ;Si no se encontró el driver del mouse, muestra un mensaje y el usuario debe salir tecleando [enter]
