@@ -125,6 +125,9 @@ conta 			db 		0 		;contador
 shot_col 		db 		ini_columna 		;posición en columna de disparo 
 shot_ren		db      ini_renglon			;posicion en renglon de disparo
 
+shot_col_enemigo db 0
+shot_ren_enemigo db 0
+
 ;; Variables de ayuda para lectura de tiempo del sistema
 tick_ms			dw 		55 		;55 ms por cada tick del sistema, esta variable se usa para operación de MUL convertir ticks a segundos
 mil				dw		1000 	;1000 auxiliar para operación DIV entre 1000
@@ -151,6 +154,10 @@ aux_enemigo_existe db 1d
 
 ;Auxiliar que se activa en caso de que un disparo del jugador sea exitoso
 aux_successfulShot db 0
+
+;Auxiliar que se activa en caso de que un disparo del enemigo sea exitoso
+aux_successfulShot_Enemy db 0
+
 
 ;Variables para pantalla de inicio
 carga_inicio 	db 		'PRESIONE [ENTER] PARA COMENZAR$'
@@ -400,7 +407,7 @@ juego:
 	cmp al, 61h						;compara que el valor ingresado sea 61h (a)
 	je mueveIzquierda				;salto a mueveIzquierda si se presiono la a
 	cmp al,20h 						;Compara que el valor ingresado sea 20h (espacio)
-	je Disparar 					;salto a Disparar si se presiono espacio
+	je DispararEnemigo 					;salto a Disparar si se presiono espacio
 	jmp siMovimientoJuego			;Salto a la etiqueta siMovimientoJuego para que continue el flujo
 	;En caso de que no exista alguna tecla inicia la etiqueta NomovimientoJuego
 	NomovimientoJuego:
@@ -522,34 +529,119 @@ Disparar:
 			mov ax, dx					;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
 			cmp ax,[ticks]				;Compara el valor de AX (ticks del sistema) con el valor almacenado en la dirección de memoria [ticks]
 			jne Movimiento_disparo		;ciclo infinito realizado con los ticks
-	
+
+DispararEnemigo:
+	mov al, [enemy_col] 				;Copia enemy_col en al
+	mov [shot_col_enemigo], al          		;Copia [enemy_col] en shot_col. Posicionar la columna del disparo donde esta la nave 
+	mov al, [enemy_ren]					;Copia enemy_ren en al
+	add al, 3d                 			;posiciona  la columna 1 renglon abajo de la nave enemiga
+	mov [shot_ren_enemigo], al          		;Copia [player_col] en shot_col. Posicionar el renglo del disparo donde esta la nave 
+	call IMPRIME_DISPARO_ENEMY       	;imprime el disparo
+	;Movimiento del disparo para que solo exista uno a la vez
+	Movimiento_disparo_enemigo:
+		CALL BORRA_DISPARO_ENEMIGO			;se borra el disparo
+		inc [shot_ren_enemigo]						;se incrementa el renglo del disparo, para bajarlo
+		CALL IMPRIME_DISPARO_ENEMY			;se vuele a imprimir el disparo
+		CALL DISPARO_EXITOSO_ENEMIGO		;verifica si el disparo fue exitoso, para la disminucion de las vidas del jugador
+		cmp [aux_successfulShot_Enemy],1d		;en caso de que el el disparo sea exitoso, [aux_successfulShot]=1
+		je disparoExitosoEnemigo				;si la condición anterior es cierta, interrumpe el flujo para borrar el disparo y reinicar su posición
+		cmp [shot_ren_enemigo], lim_inferior 	;se valida que no sobrepase el limite inferior
+		je borrarDisparoEnemigo				;si lo sobrepasa, regresa al flujo principal
+		mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
+    	int 21h							;interrupcion 21h
+    	cmp al, 0                       ;Compara el valor obtenido en el registro AL con 0
+		je NomovimientoDisparoEnemigo	;En caso de que no se haya pulsado una tecla, vamos a la etiqueta Nomovimiento
+		lee_teclado						;lee teclado
+		cmp al,64h						;compara que el valor ingresado sea 64h (d)
+		je mueveDerechaShotDisparar 			;Salto a mueveDerecha si se presiono la d
+		cmp al, 61h						;compara que el valor ingresado sea 61h (a)
+		je mueveIzquierdaShotDisparar			;salto a mueveIzquierda si se presiono la a
+		cmp al, 20h
+		jmp Disparar
+		jmp siMovimientoDisparoEnemigo				;Salto a la etiqueta siMovimiento para que continue el flujo
+		NomovimientoDisparoEnemigo:
+
+		;Movimiento fluido en el juego
+			mov ecx, 1500000  			;1 segundo en microsegundos
+			esperarDispararEnemigo:					;Bucle que nos permite que el juego tenga su continuidad
+				nop						;Es una instrucción que no realiza ninguna operación
+				loop esperarDispararEnemigo			;Procedemos a realizar el loop hasta que sea 0
+			;Movimiento de la nave de forma aleatoria una vez el jugador disparó
+			mov ah,2Ch					;Regresa en dl un valor de 0 a 99 dependiendo del reloj del sistema
+			int 21h						;Dependiendo del valor obtenido en la linea anterior, podemos realizar el movimiento aleatorio del enemigo
+			cmp dl,40d					;En caso de que dl sea menor a 40, se moverá el enemigo a la izquierda
+			jb mueveIzquierdaShotEnemigoDisparar;Enemigo moviendose a la izquierda
+			cmp dl,80d					;En caso de que dl sea menor a 80, se moverá el enemigo a la derecha
+			jb mueveDerechaShotEnemigoDisparar	;Enemigo moviendose a la derecha
+			cmp dl,90d					;En caso de que dl sea menor a 90, se moverá el enemigo hacia arriba 
+			jb mueveArribaShotEnemigoDisparar	;Enemigo moviendose hacia arriba
+			cmp dl,100d					;En caso de que dl sea menor a 100, se moverá el enemigo hacia abajo
+			jb mueveAbajoShotEnemigoDisparar	;Enemigo moviendose hacia abajo
+
+		siMovimientoDisparoEnemigo:
+		;Etiqueta en caso de que si exista un movimiento por parte del jugador usando teclado
+			mov ah, 0 					;Función 0: Configurar temporizador
+			int 1Ah   					;Llamar a la interrupción 1Ah
+			; Ahora, los ticks del sistema están en CX:DX
+			mov ax, dx					;Mueve el valor del registro DX a AX para compararlo con la variable [ticks]
+			cmp ax,[ticks]				;Compara el valor de AX (ticks del sistema) con el valor almacenado en la dirección de memoria [ticks]
+			jne Movimiento_disparo_enemigo		;ciclo infinito realizado con los ticks
+
 borrarDisparo: ;borrar el disparo, para que no quede en la pantalla y regresa al flujo principal 
 	call BORRA_DISPARO
 	jmp juego
+
+borrarDisparoEnemigo:
+	call BORRA_DISPARO_ENEMIGO
+	jmp DispararEnemigo
 
 mueveDerechaShot:
 	validar_derecha					;valida que no sobrepase el limite derecho
 	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego
 	CALL MUEVE_DERECHA          	;si no sobrepasa el limite, se mueve a la derecha 
-	jmp Movimiento_disparo			;se hace salto 
+	jmp Movimiento_disparo			;se hace salto
+
+mueveDerechaShotDisparar:
+	validar_derecha					;valida que no sobrepase el limite derecho
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA          	;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo_enemigo			;se hace salto
 
 mueveDerechaShotEnemigo:
 	validar_derecha_enemigo			;valida que no sobrepase el limite derecho del enemigo
 	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego
 	CALL MUEVE_DERECHA_ENEMIGO		;si no sobrepasa el limite, se mueve a la derecha 
-	jmp Movimiento_disparo			;se hace salto 
+	jmp Movimiento_disparo			;se hace salto
+
+mueveDerechaShotEnemigoDisparar:
+	validar_derecha_enemigo			;valida que no sobrepase el limite derecho del enemigo
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego
+	CALL MUEVE_DERECHA_ENEMIGO		;si no sobrepasa el limite, se mueve a la derecha 
+	jmp Movimiento_disparo_enemigo			;se hace salto
 
 mueveIzquierdaShot:
 	validar_izquierda				;valida que no sobrepase el limite izquierdo
 	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
 	CALL MUEVE_IZQUIERDA			;si no sobrepasa el limite, se mueve a la izquierda 
-	jmp Movimiento_disparo			;se hace salto 
+	jmp Movimiento_disparo			;se hace salto
+
+mueveIzquierdaShotDisparar:
+	validar_izquierda				;valida que no sobrepase el limite izquierdo
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA			;si no sobrepasa el limite, se mueve a la izquierda 
+	jmp Movimiento_disparo_enemigo			;se hace salto 
 
 mueveIzquierdaShotEnemigo:
 	validar_izquierda_enemigo		;valida que no sobrepase el limite derecho del enemigo
 	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
 	CALL MUEVE_IZQUIERDA_ENEMIGO	;si no sobrepasa el limite, se mueve a la izquierda 
-	jmp Movimiento_disparo			;se hace salto 
+	jmp Movimiento_disparo			;se hace salto
+
+mueveIzquierdaShotEnemigoDisparar:
+	validar_izquierda_enemigo		;valida que no sobrepase el limite derecho del enemigo
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_IZQUIERDA_ENEMIGO	;si no sobrepasa el limite, se mueve a la izquierda 
+	jmp Movimiento_disparo_enemigo			;se hace salto
 
 mueveArribaShotEnemigo:
 	validar_arriba_enemigo			;valida que no sobrepase el limite superior del enemigo
@@ -557,11 +649,23 @@ mueveArribaShotEnemigo:
 	CALL MUEVE_ARRIBA_ENEMIGO		;si no sobrepasa el limite, se mueve hacia arriba
 	jmp Movimiento_disparo			;se hace salto
 
+mueveArribaShotEnemigoDisparar:
+	validar_arriba_enemigo			;valida que no sobrepase el limite superior del enemigo
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ARRIBA_ENEMIGO		;si no sobrepasa el limite, se mueve hacia arriba
+	jmp Movimiento_disparo_enemigo			;se hace salto
+
 mueveAbajoShotEnemigo:
 	validar_abajo_enemigo			;valida que no sobrepase el limite inferior del enemigo
 	je Movimiento_disparo			;si sobrepasa el limite, se devuelve el flujo a juego 
 	CALL MUEVE_ABAJO_ENEMIGO		;si no sobrepasa el limite, se mueve hacia abajo
 	jmp Movimiento_disparo			;se hace salto
+
+mueveAbajoShotEnemigoDisparar:
+	validar_abajo_enemigo			;valida que no sobrepase el limite inferior del enemigo
+	je Movimiento_disparo_enemigo			;si sobrepasa el limite, se devuelve el flujo a juego 
+	CALL MUEVE_ABAJO_ENEMIGO		;si no sobrepasa el limite, se mueve hacia abajo
+	jmp Movimiento_disparo_enemigo			;se hace salto
 
 disparoExitoso: 					;proceso que se lleva a cabo cuando un disparo es exitoso
 	call BORRA_ENEMIGO				;llama a la función para borrar al enemigo
@@ -570,6 +674,13 @@ disparoExitoso: 					;proceso que se lleva a cabo cuando un disparo es exitoso
 	mov [aux_successfulShot],0d		;reinicia (apaga) la variable que indica un disparo exitoso
 	jmp juego						;retoma el flujo en juego
 
+disparoExitosoEnemigo:
+	call IMPRIME_JUGADOR
+	call BORRA_DISPARO
+	mov [aux_successfulShot_Enemy],0d		;reinicia (apaga) la variable que indica un disparo exitoso
+	sub player_lives, 1
+	jmp juego
+	
 crearEnemigo: ;imprime la nave enemiga en caso de que no exista. La variable [aux_enemigo_existe] se vuelve 1 para indicar que la nave enemiga sí existe.
 	CALL NUEVO_ENEMIGO
 	mov [aux_enemigo_existe],1d
@@ -1206,6 +1317,23 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;manda a imprimir el disparo enemigo. Se auxilia de col_aux y ren_aux
+	IMPRIME_DISPARO_ENEMY proc
+		mov al,[shot_col_enemigo]
+		mov ah,[shot_ren_enemigo]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		CALL PRINT_SHOT_ENEMY
+		ret
+	endp
+
+	;se imprime el disparo 
+	PRINT_SHOT_ENEMY proc 
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 254d,cVerde,bgNegro
+		ret 
+	endp
+
 	;se imprime el disparo 
 	PRINT_SHOT proc 
 		posiciona_cursor [ren_aux],[col_aux]
@@ -1223,8 +1351,25 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	;Manda a borrar el disparo enemigo. Se auxilia de col_aux y ren_aux
+	BORRA_DISPARO_ENEMIGO proc
+		mov al,[shot_col_enemigo]
+		mov ah,[shot_ren_enemigo]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call DELETE_SHOT_ENEMY	
+		ret
+	endp
+
 	;borra el disparo. Se auxilia de col_aux y ren_aux
 	DELETE_SHOT proc 
+		posiciona_cursor [ren_aux],[col_aux]
+		imprime_caracter_color 178,cNegro,bgNegro
+		ret 
+	endp
+
+	;borra el disparo. Se auxilia de col_aux y ren_aux
+	DELETE_SHOT_ENEMY proc 
 		posiciona_cursor [ren_aux],[col_aux]
 		imprime_caracter_color 178,cNegro,bgNegro
 		ret 
@@ -1240,6 +1385,15 @@ salir:				;inicia etiqueta salir
 		mov [col_aux],al
 		mov [ren_aux],ah
 		call SUCCESFUL_SHOT
+		ret
+	endp
+
+	DISPARO_EXITOSO_ENEMIGO proc
+		mov al,[player_col]
+		mov ah,[player_ren]
+		mov [col_aux],al
+		mov [ren_aux],ah
+		call SUCCESFUL_SHOT_ENEMY
 		ret
 	endp
 
@@ -1306,6 +1460,67 @@ salir:				;inicia etiqueta salir
 		ret
 	endp
 
+	SUCCESFUL_SHOT_ENEMY proc
+		
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		sub [ren_aux],2					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		dec [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		dec [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		dec [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+		
+		add [col_aux],3					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		inc [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		dec [ren_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+		inc [col_aux]					;línea para realizar el recorrido del espacio que ocupa la nave enemiga
+
+		CALL SUCCESSFUL_SHOT_COL_REN_ENEMY	;llama al procedimiento que realiza las comparaciones para comprobar si el disparo fue exitoso
+		cmp [aux_successfulShot_Enemy],1		;Esta comparación verifica que [aux_succesfulShot]=1, lo que indica que el disparo fue exitoso
+		je successful_shot_end_enemy			;en caso de que la condición ([aux_succesfulShot]=1) de la comparación anterior se cumpla, salta al final del procedimiento
+
+		successful_shot_end_enemy:
+		ret
+	endp
+
 	;realiza las comparaciones pertintentes entre las coordenadas del disparo y de la nave enemiga
 	;se ocupa a [col_aux] y a [col_ren] para representar la columna y renglón del enemigo
     SUCCESSFUL_SHOT_COL_REN proc
@@ -1322,6 +1537,24 @@ salir:				;inicia etiqueta salir
             mov [aux_successfulShot],1	;activamos la variable que representa el éxito en el disparo del jugador
             ret						
         get_out_failure:				;final fallido
+            mov [aux_successfulShot],0	;mantenemos apagada a la variable que representa el éxito en el disparo del jugador
+            ret
+    endp
+
+	SUCCESSFUL_SHOT_COL_REN_ENEMY proc
+        mov al,[shot_col_enemigo]				;al=columna que ocupa el disparo
+        cmp al,[col_aux]				;¿al=columna que ocupa el enemigo?
+        je clear_shot_col_enemy				;si lo anterior es cierto, la primer condición del disparo exitoso se cumple y saltamos a la siguiente comprobación
+        jmp get_out_failure_enemy			;si no fue cierto, el disparo falló y saltamos al final fallido
+        clear_shot_col_enemy:					;sección donde la columna de disparo es la misma que la nave enemiga
+            mov ah,[shot_ren_enemigo]			;ah=renglón que ocupa el disparo
+            cmp ah,[ren_aux]			;¿ah=renglón que ocupa el enemigo?
+            je get_out_success_enemy			;si lo anterior es cierto, la segunda y última condición del disparo exitoso se cumple y saltamos al final exitoso
+            jmp get_out_failure_enemy			;si no fue cierto, el disparo falló y saltamos al final fallido
+        get_out_success_enemy:				;final exitoso
+            mov [aux_successfulShot],1	;activamos la variable que representa el éxito en el disparo del jugador
+            ret						
+        get_out_failure_enemy:				;final fallido
             mov [aux_successfulShot],0	;mantenemos apagada a la variable que representa el éxito en el disparo del jugador
             ret
     endp
