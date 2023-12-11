@@ -392,9 +392,9 @@ juego:
     int 21h							;interrupcion 21h
     cmp al, 0                       ; 
 	je NomovimientoJuego
-	lee_teclado
 	cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
 	je crearEnemigo		;Saltamos al proceso para crear enemigo
+	lee_teclado
 	cmp al,64h			;compara que el valor ingresado sea 64h (d)
 	je mueveDerecha 	;Salto a mueveDerecha si se presiono la d
 	cmp al, 61h			;compara que el valor ingresado sea 61h (a)
@@ -403,6 +403,8 @@ juego:
 	je Disparar 		;salto a Disparar si se presiono espacio
 	jmp siMovimientoJuego
 	NomovimientoJuego:
+		cmp [aux_enemigo_existe],0 ;comprueba que la nave enemiga no exista. Si es cierto y es igual a 0, no existe.
+		je crearEnemigo		;Saltamos al proceso para crear enemigo
 		mov ecx, 1500000  ; 1 segundo en microsegundos
 			esperarJuego:
 				nop
