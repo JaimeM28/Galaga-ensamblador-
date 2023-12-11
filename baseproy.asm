@@ -82,25 +82,25 @@ botones_ren		equ     19
 stop_col 		equ 	lim_derecho+10
 stop_ren 		equ 	botones_ren
 stop_izq 		equ 	stop_col-1
-stop_der 		equ 	stop_col+1
+stop_der 		equ 	stop_col+2
 stop_sup 		equ 	stop_ren-1
-stop_inf 		equ 	stop_ren+1
+stop_inf 		equ 	stop_ren+2
 
 ;Botón PAUSE
 pause_col 		equ 	stop_col+10
 pause_ren 		equ 	botones_ren
 pause_izq 		equ 	pause_col-1
-pause_der 		equ 	pause_col+1
+pause_der 		equ 	pause_col+2
 pause_sup 		equ 	pause_ren-1
-pause_inf 		equ 	pause_ren+1
+pause_inf 		equ 	pause_ren+2
 
 ;Botón PLAY
 play_col 		equ 	pause_col+10
 play_ren 		equ 	botones_ren
 play_izq 		equ 	play_col-1
-play_der 		equ 	play_col+1
+play_der 		equ 	play_col+2
 play_sup 		equ 	play_ren-1
-play_inf 		equ 	play_ren+1
+play_inf 		equ 	play_ren+2
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -1072,7 +1072,8 @@ imprime_game_over:
 mouse_no_clic:
 	lee_mouse
 	test bx,0001h
-	jnz mouse_no_clic
+	jz mouse_no_clic
+	jmp conversion_mouse
 
 ;Lee el mouse y avanza hasta que se haga clic en el boton izquierdo
 mouse_hs:
@@ -1205,6 +1206,7 @@ boton_stop:
 	cmp cx,stop_der
 	jbe boton_stop_run
 	jmp return_to_juego
+
 ; Acciona el procedimiento para cuando se presiona STOP
 boton_stop_run:
 	;Se cumplieron todas las condiciones
