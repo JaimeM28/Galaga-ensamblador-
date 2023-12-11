@@ -373,6 +373,18 @@ imprime_home_screen:				;Impresion de la pantalla al iniciar
 	apaga_cursor_parpadeo			;deshabilita parpadeo del cursor
 	call DIBUJA_HOME_SCREEN 		;procedimiento que dibuja la pantalla de inicio del programa 
 	presiona_enter:					;Tecla para la pantalla de inicio
+	
+	muestra_cursor_mouse
+	;limpia registros
+	xor dx, dx
+	xor cx, cx
+	lee_mouse
+	test bx,0001h					;Si se presiono el click izquierdo, salta a conversion_mouse_hs
+	jnz conversion_mouse_hs
+	mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
+    int 21h							;interrupcion 21h
+    cmp al, 0                       ;Compara el valor obtenido en el registro AL con 0
+	je presiona_enter
 	lee_teclado						;lee la entrada del teclado
 	cmp al,0Dh						;compara la entrada de teclado si fue [enter]
 	jnz presiona_enter 				;Sale del ciclo hasta que presiona la tecla [enter]
@@ -595,6 +607,52 @@ mouse_no_clic:
 	lee_mouse
 	test bx,0001h
 	jnz mouse_no_clic
+
+;Lee el mouse y avanza hasta que se haga clic en el boton izquierdo
+mouse_hs:
+	lee_mouse
+conversion_mouse_hs:
+	;Leer la posicion del mouse y hacer la conversion a resolucion
+	;80x25 (columnas x renglones) en modo texto
+	mov ax,dx 			;Copia DX en AX. DX es un valor entre 0 y 199 (renglon)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor del renglon en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov dx,ax 			;Copia AX en DX. AX es un valor entre 0 y 24 (renglon)
+
+	mov ax,cx 			;Copia CX en AX. CX es un valor entre 0 y 639 (columna)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor de la columna en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov cx,ax 			;Copia AX en CX. AX es un valor entre 0 y 79 (columna)
+
+	;Aquí se revisa si se hizo clic en el botón izquierdo
+	test bx,0001h 		;Para revisar si el boton izquierdo del mouse fue presionado
+	jz mouse_hs 			;Si el boton izquierdo no fue presionado, vuelve a leer el estado del mouse
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;Aqui va la lógica de la posicion del mouse;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;Si el mouse fue presionado en el renglon 0
+	;se va a revisar si fue dentro del boton [X]
+	cmp dx,0
+	je boton_x_hs
+	boton_x_hs:
+	cmp cx,76
+	jge boton_x2_hs
+	jmp presiona_enter
+	boton_x2_hs:
+	cmp cx,78
+	jbe boton_x3_hs
+	jmp presiona_enter
+	boton_x3_hs:
+	;Se cumplieron todas las condiciones
+	jmp salir
+
+
+
 ;Lee el mouse y avanza hasta que se haga clic en el boton izquierdo
 mouse:
 	lee_mouse
