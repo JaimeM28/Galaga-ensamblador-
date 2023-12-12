@@ -417,9 +417,6 @@ imprime_home_screen:				;Impresion de la pantalla al iniciar
 	oculta_cursor_teclado			;oculta cursor de la pantalla
 	apaga_cursor_parpadeo			;deshabilita parpadeo del cursor
 	call DIBUJA_HOME_SCREEN 		;procedimiento que dibuja la pantalla de inicio del programa
-	call BORRA_JUGADOR
-	mov [player_col], ini_columna
-	mov [player_ren], ini_renglon
 	presiona_enter:					;Tecla para la pantalla de inicio
 		muestra_cursor_mouse
 	;limpia registros
@@ -688,8 +685,13 @@ DispararEnemigo:
 		cmp [shot_ren_enemigo], lim_inferior 	;se valida que no sobrepase el limite inferior
 		je borrarDisparoEnemigo				;si lo sobrepasa, regresa al flujo principal
 		; limpiar registros
+		aux_botones_disparo:
 		xor dx, dx
 		xor cx, cx
+		lee_mouse
+		test bx,0001h
+		jnz conversion_mouse_disparo_enemigo
+		play_disparo: 
 
 		mov ah, 0Bh      				;opcion bh, para verificar si se pulso una tecla 
     	int 21h							;interrupcion 21h
@@ -1247,6 +1249,231 @@ boton_play_run:
 ; se presiona el click sobre algun area que no tiene boton
 return_to_juego:
 	jmp juego
+
+
+mouse_no_clic_disparo:
+	lee_mouse
+	test bx,0001h
+	jz mouse_no_clic_disparo
+	mouse_disparo_enemigo_pause:
+	;Leer la posicion del mouse y hacer la conversion a resolucion
+	;80x25 (columnas x renglones) en modo texto
+	mov ax,dx 			;Copia DX en AX. DX es un valor entre 0 y 199 (renglon)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor del renglon en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov dx,ax 			;Copia AX en DX. AX es un valor entre 0 y 24 (renglon)
+
+	mov ax,cx 			;Copia CX en AX. CX es un valor entre 0 y 639 (columna)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor de la columna en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov cx,ax 			;Copia AX en CX. AX es un valor entre 0 y 79 (columna)
+
+	;Aquí se revisa si se hizo clic en el botón izquierdo
+	test bx,0001h 		;Para revisar si el boton izquierdo del mouse fue presionado
+	jz mouse_disparo_enemigo_pause			;Si el boton izquierdo no fue presionado, vuelve a leer el estado del mouse
+	;se va a revisar si fue dentro del boton [X]
+	cmp dx,0
+	je boton_x_disparo_pause
+	cmp dx, botones_ren ; mismo renglon para stop, pause y play
+	jge botones_verifica_limite_inferior_disparo_pause ; si es del renglon desde donde incian los botones hacia abajo salta
+	jmp mouse_no_clic_disparo
+
+	; Verifica si el click se ha dado antes o en el limite inferior del area de botones
+	botones_verifica_limite_inferior_disparo_pause:
+	cmp dx,stop_inf
+	jbe botones_handler_disparo_pause ; si esta antes o dentro del limite inferior se sigue ejecutando
+	jmp mouse_no_clic_disparo ; en caso contrario se sigue ejecutando el juego
+
+	botones_handler_disparo_pause:
+	; boton play
+	cmp cx,play_izq
+	jg boton_play_disparo_pause
+
+	; boton pause
+	cmp cx,pause_izq
+	jg mouse_no_clic_disparo
+	
+	; boton stop
+	cmp cx,stop_izq
+	jg boton_stop_disparo
+	jmp mouse_no_clic_disparo
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;       FUNCIONAMIENTO BOTON STOP          ;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	; Valida que este antes o en el limite derecho del boton
+	boton_stop_disparo_pause:
+		cmp cx,stop_der
+		jbe boton_stop_run_disparo_pause
+		jmp mouse_no_clic_disparo
+
+	; Acciona el procedimiento para cuando se presiona STOP
+	boton_stop_run_disparo_pause:
+		;Se cumplieron todas las condiciones
+		call PUSH_BOTON_STOP
+		jmp inicio
+
+	boton_play_disparo_pause:
+	cmp cx,play_der
+	jbe boton_play_run_disparo_pause
+	jmp mouse_no_clic_disparo	
+
+	; Acciona el procedimiento para cuando se presiona PLAY
+	boton_play_run_disparo_pause:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_PLAY
+	jmp play_disparo
+
+	;Boton salir cuando esta en pausa 
+	boton_x_disparo_pause:
+	cmp cx,76
+	jge boton_x2_disparo_pause
+	jmp mouse_no_clic_disparo
+	boton_x2_disparo_pause:
+	cmp cx,78
+	jbe boton_x3_disparo_pause
+	jmp mouse_no_clic_disparo
+boton_x3_disparo_pause:
+	;Se cumplieron todas las condiciones
+	jmp salir
+
+
+
+
+mouse_disparo_enemigo:
+	lee_mouse
+conversion_mouse_disparo_enemigo:
+	;Leer la posicion del mouse y hacer la conversion a resolucion
+	;80x25 (columnas x renglones) en modo texto
+	mov ax,dx 			;Copia DX en AX. DX es un valor entre 0 y 199 (renglon)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor del renglon en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov dx,ax 			;Copia AX en DX. AX es un valor entre 0 y 24 (renglon)
+
+	mov ax,cx 			;Copia CX en AX. CX es un valor entre 0 y 639 (columna)
+	div [ocho] 			;Division de 8 bits
+						;divide el valor de la columna en resolucion 640x200 en donde se encuentra el mouse
+						;para obtener el valor correspondiente en resolucion 80x25
+	xor ah,ah 			;Descartar el residuo de la division anterior
+	mov cx,ax 			;Copia AX en CX. AX es un valor entre 0 y 79 (columna)
+
+	;Aquí se revisa si se hizo clic en el botón izquierdo
+	test bx,0001h 		;Para revisar si el boton izquierdo del mouse fue presionado
+	jz mouse_disparo_enemigo 			;Si el boton izquierdo no fue presionado, vuelve a leer el estado del mouse
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;Aqui va la lógica de la posicion del mouse;
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;Si el mouse fue presionado en el renglon 0
+	;se va a revisar si fue dentro del boton [X]
+	cmp dx,0
+	je boton_x_disparo
+
+	; verificar limite superior
+	; si fue en el renglon del boton stop
+	cmp dx, botones_ren ; mismo renglon para stop, pause y play
+	jge botones_verifica_limite_inferior_disparo ; si es del renglon desde donde incian los botones hacia abajo salta
+
+	jmp return_to_disparo ; en caso de que no sea, se ejecuta el juego con normalidad
+
+
+; Verifica si el click se ha dado antes o en el limite inferior del area de botones
+botones_verifica_limite_inferior_disparo:
+	cmp dx,stop_inf
+	jbe botones_handler_disparo ; si esta antes o dentro del limite inferior se sigue ejecutando
+	jmp return_to_disparo ; en caso contrario se sigue ejecutando el juego
+
+
+; Verifica de derecha a izquierda que columna limite izquierda fue seleccionado
+botones_handler_disparo:
+	; boton play
+	cmp cx,play_izq
+	jg boton_play_disparo
+	
+
+	; boton pause
+	cmp cx,pause_izq
+	jg boton_pause_disparo
+
+	; boton stop
+	cmp cx,stop_izq
+	jg boton_stop_disparo
+	jmp return_to_disparo
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;    FUNCIONAMIENTO BOTON [X] (CERRRAR)    ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Lógica para revisar si el mouse fue presionado en [X]
+;[X] se encuentra en renglon 0 y entre columnas 76 y 78
+boton_x_disparo:
+	cmp cx,76
+	jge boton_x2_disparo
+	jmp return_to_disparo
+boton_x2_disparo:
+	cmp cx,78
+	jbe boton_x3
+	jmp return_to_disparo
+boton_x3_disparo:
+	;Se cumplieron todas las condiciones
+	jmp salir
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON STOP          ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_stop_disparo:
+	cmp cx,stop_der
+	jbe boton_stop_run_disparo
+	jmp return_to_disparo
+
+; Acciona el procedimiento para cuando se presiona STOP
+boton_stop_run_disparo:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_STOP
+	jmp inicio
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON PAUSE         ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_pause_disparo:
+	cmp cx,pause_der
+	jbe boton_pause_run_disparo
+	jmp return_to_disparo
+
+; Acciona el procedimiento para cuando se presiona PAUSE
+boton_pause_run_disparo:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_PAUSE
+	; sirve para hacer una pausa forzada haciendo que este a la espera de un click
+	jmp mouse_no_clic_disparo
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       FUNCIONAMIENTO BOTON PLAY          ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Valida que este antes o en el limite derecho del boton
+boton_play_disparo:
+	cmp cx,play_der
+	jbe boton_play_run_disparo
+	jmp return_to_disparo
+
+; Acciona el procedimiento para cuando se presiona PLAY
+boton_play_run_disparo:
+	;Se cumplieron todas las condiciones
+	call PUSH_BOTON_PLAY
+	jmp play_disparo
+
+; se presiona el click sobre algun area que no tiene boton
+
+return_to_disparo:
+	jmp aux_botones_disparo
+
 
 ;Si no se encontró el driver del mouse, muestra un mensaje y el usuario debe salir tecleando [enter]
 teclado:
@@ -2138,7 +2365,9 @@ salir:				;inicia etiqueta salir
 	;Imprime al enemigo nuevamente
 	IMPRIME_NUEVO_ENEMIGO proc
 		;Borrar posicion actual del enemigo y reiniciar su posicion
-		;Imprime enemigo
+		call BORRA_ENEMIGO
+		mov [enemy_col],ini_columna 	;posicion en columna del enemigo
+		mov [enemy_ren],3 		
 		call IMPRIME_ENEMIGO
 		ret
 	endp
@@ -2245,6 +2474,9 @@ salir:				;inicia etiqueta salir
 
 		;imprimiendo estrellas 
 		call IMPRIME_ESTRELLAS
+		
+		mov [player_col], ini_columna
+		mov [player_ren], ini_renglon
 		call IMPRIME_JUGADOR
 		ret 
 	endp
